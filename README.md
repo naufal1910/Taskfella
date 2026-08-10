@@ -13,7 +13,7 @@ git clone https://github.com/naufal1910/Taskfella.git
 cd Taskfella
 cp .env.example .env
 pnpm install --frozen-lockfile
-docker compose up -d db
+docker compose up -d --wait db
 pnpm db:migrate
 pnpm dev
 ```
@@ -31,7 +31,7 @@ A migrated, reachable database returns HTTP `200` with `status: "ok"`. An unavai
 | Command                          | Purpose                                                          |
 | -------------------------------- | ---------------------------------------------------------------- |
 | `pnpm install --frozen-lockfile` | Install the pinned dependency graph                              |
-| `docker compose up -d db`        | Start local PostgreSQL                                           |
+| `docker compose up -d --wait db` | Start local PostgreSQL and wait for its healthcheck              |
 | `pnpm db:migrate`                | Apply repeatable Drizzle migrations                              |
 | `pnpm db:check`                  | Verify PostgreSQL reachability and migration readiness           |
 | `pnpm dev`                       | Start the development server                                     |
