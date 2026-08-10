@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { type Database } from "@/server/db/client";
 import { accounts, passwordCredentials, type Account } from "@/server/db/schema";
-import { hashPassword, verifyPassword } from "./password";
+import { hashPassword, verifyPasswordWithFallback } from "./password";
 
 const MAX_EMAIL_LENGTH = 320;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/;
@@ -52,6 +52,27 @@ export async function createAccount(
 export async function getAccountById(db: Database, accountId: string): Promise<Account | null> {
   const [account] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
   return account ?? null;
+}
+
+export async function getAccountByNormalizedEmail(
+  db: Database,
+  normalizedEmail: string,
+): Promise<Account | null> {
+  const [account] = await db
+    .select()
+    .from(accounts)
+    .where(eq(accounts.normalizedEmail, normalizedEmail))
+    .limit(1);
+  return account ?? null;
+}
+
+export function isUniqueConstraintViolation(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const candidate = error as { code?: unknown; cause?: unknown };
+  return candidate.code === "23505" || isUniqueConstraintViolation(candidate.cause);
 }
 
 /** Persist a password hash without exposing the hash in the returned value. */
@@ -107,5 +128,5 @@ export async function verifyAccountPassword(
     .where(eq(passwordCredentials.accountId, accountId))
     .limit(1);
 
-  return credential ? verifyPassword(password, credential.passwordHash) : false;
+  return verifyPasswordWithFallback(password, credential?.passwordHash);
 }

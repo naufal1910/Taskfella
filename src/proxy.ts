@@ -8,6 +8,20 @@ export function proxy(request: NextRequest): NextResponse {
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   applyRequestContext(response.headers, context);
+  const pathname = request.nextUrl.pathname;
+  if (
+    pathname.startsWith("/api/auth") ||
+    pathname === "/api/account" ||
+    pathname === "/account" ||
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/logout" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password" ||
+    pathname.startsWith("/verify-email")
+  ) {
+    response.headers.set("cache-control", "no-store");
+  }
   return response;
 }
 

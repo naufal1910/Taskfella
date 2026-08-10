@@ -1,24 +1,85 @@
 import { z } from "zod";
 
-const environmentSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  DATABASE_URL: z
-    .string()
-    .min(1, "DATABASE_URL is required")
-    .refine((value) => value.startsWith("postgres://") || value.startsWith("postgresql://"), {
-      message: "DATABASE_URL must use the PostgreSQL URL scheme",
-    }),
-  APP_URL: z
-    .string()
-    .url("APP_URL must be a valid URL")
-    .refine((value) => value.startsWith("http://") || value.startsWith("https://"), {
-      message: "APP_URL must use http or https",
-    }),
-  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
-  DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
-});
+const environmentSchema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    DATABASE_URL: z
+      .string()
+      .min(1, "DATABASE_URL is required")
+      .refine((value) => value.startsWith("postgres://") || value.startsWith("postgresql://"), {
+        message: "DATABASE_URL must use the PostgreSQL URL scheme",
+      }),
+    APP_URL: z
+      .string()
+      .url("APP_URL must be a valid URL")
+      .refine((value) => value.startsWith("http://") || value.startsWith("https://"), {
+        message: "APP_URL must use http or https",
+      }),
+    LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+    DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
+    EMAIL_DELIVERY_MODE: z.enum(["local", "smtp"]).default("local"),
+    EMAIL_LOCAL_CAPTURE_DIR: z.string().min(1).default(".local/mail"),
+    EMAIL_SMTP_HOST: z.string().min(1).optional(),
+    EMAIL_SMTP_PORT: z.coerce.number().int().min(1).max(65_535).default(587),
+    EMAIL_SMTP_SECURE: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+    EMAIL_SMTP_USER: z.string().min(1).optional(),
+    EMAIL_SMTP_PASSWORD: z.string().min(1).optional(),
+    EMAIL_FROM: z.string().min(1).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.NODE_ENV !== "production") {
+      return;
+    }
 
-export type AppEnv = z.infer<typeof environmentSchema>;
+    if (value.EMAIL_DELIVERY_MODE !== "smtp") {
+      context.addIssue({
+        code: "custom",
+        path: ["EMAIL_DELIVERY_MODE"],
+        message: "production requires SMTP delivery",
+      });
+    }
+    if (!value.EMAIL_SMTP_HOST) {
+      context.addIssue({
+        code: "custom",
+        path: ["EMAIL_SMTP_HOST"],
+        message: "production requires an SMTP host",
+      });
+    }
+    if (!value.EMAIL_FROM) {
+      context.addIssue({
+        code: "custom",
+        path: ["EMAIL_FROM"],
+        message: "production requires a sender address",
+      });
+    }
+    if (
+      (value.EMAIL_SMTP_USER && !value.EMAIL_SMTP_PASSWORD) ||
+      (!value.EMAIL_SMTP_USER && value.EMAIL_SMTP_PASSWORD)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["EMAIL_SMTP_USER", "EMAIL_SMTP_PASSWORD"],
+        message: "SMTP credentials must be supplied together",
+      });
+    }
+  });
+
+type ParsedEnvironment = z.infer<typeof environmentSchema>;
+
+// Keep the foundation's small test/environment fixtures source-compatible while
+// allowing Phase 1B email settings to be omitted outside the sender boundary.
+export type AppEnv = Omit<
+  ParsedEnvironment,
+  "EMAIL_DELIVERY_MODE" | "EMAIL_LOCAL_CAPTURE_DIR" | "EMAIL_SMTP_PORT" | "EMAIL_SMTP_SECURE"
+> & {
+  EMAIL_DELIVERY_MODE?: ParsedEnvironment["EMAIL_DELIVERY_MODE"];
+  EMAIL_LOCAL_CAPTURE_DIR?: ParsedEnvironment["EMAIL_LOCAL_CAPTURE_DIR"];
+  EMAIL_SMTP_PORT?: ParsedEnvironment["EMAIL_SMTP_PORT"];
+  EMAIL_SMTP_SECURE?: ParsedEnvironment["EMAIL_SMTP_SECURE"];
+};
 export type EnvironmentInput = Record<string, string | undefined>;
 
 function selectEnvironment(input: EnvironmentInput): Record<string, string | undefined> {
@@ -28,6 +89,14 @@ function selectEnvironment(input: EnvironmentInput): Record<string, string | und
     APP_URL: input.APP_URL,
     LOG_LEVEL: input.LOG_LEVEL,
     DB_POOL_MAX: input.DB_POOL_MAX,
+    EMAIL_DELIVERY_MODE: input.EMAIL_DELIVERY_MODE,
+    EMAIL_LOCAL_CAPTURE_DIR: input.EMAIL_LOCAL_CAPTURE_DIR,
+    EMAIL_SMTP_HOST: input.EMAIL_SMTP_HOST,
+    EMAIL_SMTP_PORT: input.EMAIL_SMTP_PORT,
+    EMAIL_SMTP_SECURE: input.EMAIL_SMTP_SECURE,
+    EMAIL_SMTP_USER: input.EMAIL_SMTP_USER,
+    EMAIL_SMTP_PASSWORD: input.EMAIL_SMTP_PASSWORD,
+    EMAIL_FROM: input.EMAIL_FROM,
   };
 }
 

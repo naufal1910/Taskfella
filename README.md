@@ -2,7 +2,7 @@
 
 Taskfella is an open-source, personal-first, board-first workspace for focused execution. It will bring Kanban planning, Pomodoro focus, manual time tracking, and personal analytics into one calm daily workflow.
 
-This repository currently contains **Phase 0 plus Phase 1A: the application and authentication foundation**. It intentionally does not implement signup/login pages, email delivery, Google OAuth routes, boards, tasks, timers, analytics, exports, or other later-phase product behavior.
+This repository currently contains **Phase 0 plus Phase 1A and Phase 1B: the application, authentication foundation, and email/password identity lifecycle**. Google OAuth, boards, tasks, timers, analytics, and exports remain later-phase behavior.
 
 ## Quick start
 
@@ -44,7 +44,9 @@ A migrated, reachable database returns HTTP `200` with `status: "ok"`. An unavai
 | `pnpm start`                     | Serve the production build                                       |
 | `pnpm db:stop`                   | Stop local PostgreSQL                                            |
 
-The full local quality pass is `pnpm validate`. Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. Phase 1A uses database-backed opaque random tokens and needs no external or private authentication secret.
+The full local quality pass is `pnpm validate`. Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. Phase 1A/1B use database-backed opaque random tokens and need no deployment-wide session secret.
+
+In local or test environments, email verification and password-reset messages are captured as JSON files under `.local/mail/` (ignored by git). Inspect the latest message with `ls -lt .local/mail/` and remove the directory with `rm -rf .local/mail/` when finished. Local capture is selected explicitly by `EMAIL_DELIVERY_MODE=local`; production configuration is rejected unless `EMAIL_DELIVERY_MODE=smtp` and an SMTP host and sender are supplied. Set the documented SMTP placeholders in the deployment environment, never in a commit.
 
 ## Production container
 
@@ -54,7 +56,14 @@ Build and run the standalone production image with values supplied at runtime:
 docker build -t taskfella:local .
 docker run --rm -p 3000:3000 \
   -e DATABASE_URL='postgresql://user:password@host:5432/taskfella' \
-  -e APP_URL='http://localhost:3000' \
+  -e APP_URL='https://taskfella.example' \
+  -e EMAIL_DELIVERY_MODE='smtp' \
+  -e EMAIL_SMTP_HOST='smtp.example' \
+  -e EMAIL_SMTP_PORT='587' \
+  -e EMAIL_SMTP_SECURE='false' \
+  -e EMAIL_FROM='Taskfella <no-reply@example>' \
+  -e EMAIL_SMTP_USER='smtp-user' \
+  -e EMAIL_SMTP_PASSWORD='supply-at-runtime' \
   taskfella:local
 ```
 
@@ -69,12 +78,14 @@ The contributor-facing validator command and zero-error/zero-warning requirement
 
 - [Approved product specification](docs/specification/taskfella-mvp-design.md)
 - [Approved implementation analysis and phased plan](docs/implementation/taskfella-analysis.md)
-- [Phase 0 and Phase 1A documentation index](docs/README.md)
+- [Phase 0 through Phase 1B documentation index](docs/README.md)
 - [Phase 1A authentication foundation](docs/implementation/taskfella-phase1a-auth.md)
+- [Phase 1B email/password authentication](docs/implementation/taskfella-phase1b-auth.md)
 - [Public roadmap](https://github.com/users/naufal1910/projects/4)
 - [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2)
 - [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13)
 - [Calm Execution UI foundation issue](https://github.com/naufal1910/Taskfella/issues/19)
+- [Phase 1B issue](https://github.com/naufal1910/Taskfella/issues/14)
 
 ## License
 

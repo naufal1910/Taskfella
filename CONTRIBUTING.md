@@ -1,6 +1,6 @@
 # Contributing to Taskfella
 
-Thank you for helping build Taskfella. Phase 1A is server/domain-only authentication foundation work; please check the [public roadmap](https://github.com/users/naufal1910/projects/4), [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2), [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13), [Calm Execution UI foundation issue](https://github.com/naufal1910/Taskfella/issues/19), and [Phase 1A notes](docs/implementation/taskfella-phase1a-auth.md) before starting product work.
+Thank you for helping build Taskfella. Phase 1B includes the accessible email/password identity lifecycle on the Phase 1A foundation; please check the [public roadmap](https://github.com/users/naufal1910/projects/4), [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2), [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13), [Phase 1B issue](https://github.com/naufal1910/Taskfella/issues/14), [Calm Execution UI foundation issue](https://github.com/naufal1910/Taskfella/issues/19), [Phase 1A notes](docs/implementation/taskfella-phase1a-auth.md), and [Phase 1B notes](docs/implementation/taskfella-phase1b-auth.md) before starting product work.
 
 ## Development setup
 
@@ -14,7 +14,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-Do not put real credentials in `.env.example`, source files, tests, commits, or pull requests. `.env` is ignored and local PostgreSQL values are development-only placeholders.
+Do not put real credentials in `.env.example`, source files, tests, commits, or pull requests. `.env` is ignored and local PostgreSQL values are development-only placeholders. Local transactional messages are captured under the ignored `.local/mail/` directory; inspect or remove those artifacts locally, and never use local delivery in production.
 
 ## Visual foundation
 

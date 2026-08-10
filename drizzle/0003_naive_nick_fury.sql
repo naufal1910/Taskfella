@@ -1,0 +1,4 @@
+ALTER TABLE "email_verification_tokens" ADD COLUMN "invalidated_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "password_reset_tokens" ADD COLUMN "invalidated_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "email_verification_tokens" ADD CONSTRAINT "email_verification_tokens_invalidated_at_after_created_check" CHECK ("email_verification_tokens"."invalidated_at" IS NULL OR "email_verification_tokens"."invalidated_at" >= "email_verification_tokens"."created_at");--> statement-breakpoint
+ALTER TABLE "password_reset_tokens" ADD CONSTRAINT "password_reset_tokens_invalidated_at_after_created_check" CHECK ("password_reset_tokens"."invalidated_at" IS NULL OR "password_reset_tokens"."invalidated_at" >= "password_reset_tokens"."created_at");

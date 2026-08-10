@@ -24,6 +24,12 @@ The check is tied to the migration hash in `src/server/db/client.ts`, not merely
 
 Responses include request and correlation IDs for support while excluding connection strings, exception details, and user content.
 
+## Local transactional email
+
+Phase 1B defaults non-production environments to `EMAIL_DELIVERY_MODE=local`. Verification and reset messages are written as mode `0600` JSON artifacts below the ignored `.local/mail/` directory; they are not logged or returned by an API. Inspect with `ls -lt .local/mail/` and clean up with `rm -rf .local/mail/`. Set `EMAIL_LOCAL_CAPTURE_DIR` to a temporary directory in automated tests when needed.
+
+Production startup rejects local delivery. Set `EMAIL_DELIVERY_MODE=smtp`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM`, then configure the documented port, TLS mode, and optional paired SMTP credentials. The app uses the portable SMTP transport and never falls back to local capture.
+
 ## Production lifecycle
 
-Build the image with `docker build -t taskfella:local .`. Supply `DATABASE_URL` and `APP_URL` only at runtime, run `pnpm db:migrate` from a controlled deployment environment, then start the standalone image. PostgreSQL backups, TLS termination, and secret delivery belong to the deployment environment. Phase 1A's opaque session tokens do not require a deployment-wide session secret; provider credentials remain deferred to later authentication-flow slices.
+Build the image with `docker build -t taskfella:local .`. Supply `DATABASE_URL`, `APP_URL`, and the required SMTP settings only at runtime, run `pnpm db:migrate` from a controlled deployment environment, then start the standalone image. PostgreSQL backups, TLS termination, and secret delivery belong to the deployment environment. Phase 1A's opaque session tokens do not require a deployment-wide session secret.

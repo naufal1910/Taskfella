@@ -4,19 +4,19 @@ import { BrandMark, Button, StatusBadge, Surface } from "@/components/ui/primiti
 
 const foundationChecks = [
   {
-    label: "Responsive application shell",
+    label: "Email and password identity",
     value: "Ready",
-    detail: "A calm starting point on every screen size.",
+    detail: "Signup, verification, login, logout, and password recovery are available.",
   },
   {
-    label: "PostgreSQL foundation",
-    value: "Connected by configuration",
-    detail: "Database readiness is exposed through the health API.",
+    label: "Secure account foundation",
+    value: "Protected",
+    detail: "Opaque sessions, CSRF checks, hashed tokens, and database rate limits are active.",
   },
   {
-    label: "Product workflows",
-    value: "Coming in later phases",
-    detail: "Phase 0 keeps the foundation deliberately small.",
+    label: "Focused workspaces",
+    value: "Coming next",
+    detail: "Board and execution workflows will build on the authenticated account.",
   },
 ];
 
@@ -35,8 +35,14 @@ export function TaskfellaShell() {
           <a className="nav-link" href="#status">
             Status
           </a>
+          <Link className="nav-link" href="/login">
+            Sign in
+          </Link>
+          <Link className="nav-link" href="/signup">
+            Create account
+          </Link>
         </nav>
-        <span className="phase-badge">Phase 0</span>
+        <span className="phase-badge">Phase 1B</span>
       </header>
 
       <main id="foundation" className="shell-main">
@@ -44,12 +50,17 @@ export function TaskfellaShell() {
           <p className="eyebrow">Personal execution, thoughtfully prepared</p>
           <h1 id="hero-title">A calmer place to move meaningful work forward.</h1>
           <p className="hero-copy">
-            Taskfella is building a focused, board-first workspace for personal projects. The
-            application foundation is ready for the product layers ahead.
+            Taskfella is building a focused, board-first workspace for personal projects. Create an
+            account to keep your work ready for the product layers ahead.
           </p>
-          <Button href="#status">
-            Explore the foundation <span aria-hidden="true">↓</span>
-          </Button>
+          <div className="hero-actions">
+            <Link className="primary-action" href="/signup">
+              Create your account <span aria-hidden="true">→</span>
+            </Link>{" "}
+            <Button href="#status" variant="secondary">
+              Explore the foundation <span aria-hidden="true">↓</span>
+            </Button>
+          </div>
         </section>
 
         <Surface
