@@ -8,6 +8,20 @@
       "when": 1786367890250,
       "tag": "0000_phase_0_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786376607317,
+      "tag": "0001_strong_purple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786376845708,
+      "tag": "0002_dizzy_banshee",
+      "breakpoints": true
     }
   ]
 }

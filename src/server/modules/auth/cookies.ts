@@ -1,0 +1,136 @@
+import { randomBytes } from "node:crypto";
+import type { NextResponse } from "next/server";
+import { type AppEnv, getEnvironment } from "@/server/config/env";
+
+export const SESSION_COOKIE_NAME = "taskfella_session";
+export const CSRF_COOKIE_NAME = "taskfella_csrf";
+export const CSRF_HEADER_NAME = "x-csrf-token";
+export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+export const CSRF_COOKIE_MAX_AGE_SECONDS = 24 * 60 * 60;
+
+function readCookie(request: Request, name: string): string | undefined {
+  const cookieHeader = request.headers.get("cookie");
+  if (!cookieHeader) {
+    return undefined;
+  }
+
+  for (const part of cookieHeader.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0) {
+      continue;
+    }
+
+    const key = part.slice(0, separator).trim();
+    if (key !== name) {
+      continue;
+    }
+
+    const value = part.slice(separator + 1).trim();
+    try {
+      const decoded = decodeURIComponent(value);
+      return decoded.length > 0 && decoded.length <= 512 ? decoded : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+export function getSessionToken(request: Request): string | undefined {
+  return readCookie(request, SESSION_COOKIE_NAME);
+}
+
+export function getCsrfCookie(request: Request): string | undefined {
+  return readCookie(request, CSRF_COOKIE_NAME);
+}
+
+function isProduction(environment: AppEnv): boolean {
+  return environment.NODE_ENV === "production";
+}
+
+function setCookie(
+  response: NextResponse,
+  name: string,
+  value: string,
+  options: {
+    maxAge: number;
+    httpOnly: boolean;
+    secure: boolean;
+  },
+): void {
+  response.cookies.set({
+    name,
+    value,
+    path: "/",
+    maxAge: options.maxAge,
+    httpOnly: options.httpOnly,
+    secure: options.secure,
+    sameSite: "lax",
+  });
+}
+
+export function setSessionCookie(
+  response: NextResponse,
+  token: string,
+  expiresAt?: Date,
+  environment: AppEnv = getEnvironment(),
+): void {
+  const maxAge = expiresAt
+    ? Math.max(
+        1,
+        Math.min(
+          SESSION_COOKIE_MAX_AGE_SECONDS,
+          Math.ceil((expiresAt.getTime() - Date.now()) / 1000),
+        ),
+      )
+    : SESSION_COOKIE_MAX_AGE_SECONDS;
+  setCookie(response, SESSION_COOKIE_NAME, token, {
+    maxAge,
+    httpOnly: true,
+    secure: isProduction(environment),
+  });
+}
+
+export function clearSessionCookie(
+  response: NextResponse,
+  environment: AppEnv = getEnvironment(),
+): void {
+  setCookie(response, SESSION_COOKIE_NAME, "", {
+    maxAge: 0,
+    httpOnly: true,
+    secure: isProduction(environment),
+  });
+}
+
+export function createCsrfToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+/** Set a readable double-submit token; the authentication cookie remains HttpOnly. */
+export function setCsrfCookie(
+  response: NextResponse,
+  token: string,
+  environment: AppEnv = getEnvironment(),
+): void {
+  setCookie(response, CSRF_COOKIE_NAME, token, {
+    maxAge: CSRF_COOKIE_MAX_AGE_SECONDS,
+    httpOnly: false,
+    secure: isProduction(environment),
+  });
+}
+
+export function ensureCsrfCookie(
+  request: Request,
+  response: NextResponse,
+  environment: AppEnv = getEnvironment(),
+): string {
+  const existing = getCsrfCookie(request);
+  if (existing) {
+    return existing;
+  }
+
+  const token = createCsrfToken();
+  setCsrfCookie(response, token, environment);
+  return token;
+}

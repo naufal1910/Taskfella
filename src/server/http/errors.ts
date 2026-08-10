@@ -1,13 +1,23 @@
 import { NextResponse } from "next/server";
 
 export type AppErrorCode =
-  "INVALID_REQUEST" | "DATABASE_UNAVAILABLE" | "NOT_FOUND" | "CONFLICT" | "INTERNAL_ERROR";
+  | "INVALID_REQUEST"
+  | "DATABASE_UNAVAILABLE"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "RATE_LIMITED"
+  | "INTERNAL_ERROR";
 
 const statusByCode: Record<AppErrorCode, number> = {
   INVALID_REQUEST: 400,
   DATABASE_UNAVAILABLE: 503,
   NOT_FOUND: 404,
   CONFLICT: 409,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,
 };
 
@@ -16,6 +26,9 @@ const messageByCode: Record<AppErrorCode, string> = {
   DATABASE_UNAVAILABLE: "The service is temporarily unable to reach its database.",
   NOT_FOUND: "The requested resource was not found.",
   CONFLICT: "The request conflicts with the current application state.",
+  UNAUTHORIZED: "Authentication is required.",
+  FORBIDDEN: "The request is not allowed.",
+  RATE_LIMITED: "Too many requests. Try again later.",
   INTERNAL_ERROR: "An unexpected error occurred.",
 };
 
