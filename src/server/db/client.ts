@@ -14,6 +14,10 @@ const globalForDatabase = globalThis as typeof globalThis & {
   taskfellaDatabase?: DatabaseResources;
 };
 
+// Drizzle records the SHA-256 of each applied migration in its ledger. This is
+// the stable identity of the required Phase 0 migration, not a row count.
+const PHASE_0_MIGRATION_HASH = "5cd233f4dc2ce97cb7296f67d605b941f7d905a3c9afd0520d281cc532caf8c9";
+
 export function createDatabase(
   connectionString = getEnvironment().DATABASE_URL,
 ): DatabaseResources {
@@ -41,16 +45,15 @@ export function getSql(): Sql {
 }
 
 /**
- * Readiness requires both a live PostgreSQL connection and the migration ledger.
- * The ledger is the only database object created by Phase 0 migrations.
+ * Readiness requires a live PostgreSQL connection and the applied Phase 0
+ * migration. A ledger table without the current migration row is not ready.
  */
 export async function checkDatabaseReadiness(): Promise<boolean> {
   const result = await getSql()<{ migrations_ready: boolean }[]>`
     SELECT EXISTS (
       SELECT 1
-      FROM information_schema.tables
-      WHERE table_schema = 'drizzle'
-        AND table_name = '__drizzle_migrations'
+      FROM drizzle.__drizzle_migrations
+      WHERE hash = ${PHASE_0_MIGRATION_HASH}
     ) AS migrations_ready
   `;
 
