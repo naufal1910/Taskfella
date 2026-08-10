@@ -1,6 +1,6 @@
 # Contributing to Taskfella
 
-Thank you for helping build Taskfella. Phase 0 is intentionally foundation-only; please check the [public roadmap](https://github.com/users/naufal1910/projects/4) and [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2) before starting product work.
+Thank you for helping build Taskfella. Phase 1A is server/domain-only authentication foundation work; please check the [public roadmap](https://github.com/users/naufal1910/projects/4), [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2), [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13), and [Phase 1A notes](docs/implementation/taskfella-phase1a-auth.md) before starting product work.
 
 ## Development setup
 
@@ -35,7 +35,7 @@ Database integration tests need a reachable, migrated PostgreSQL instance. Keep 
 
 - `src/app/` contains the Next.js App Router UI and route handlers.
 - `src/server/` contains configuration, HTTP foundations, observability, database access, and domain-ready server modules.
-- `drizzle/` contains ordered migrations; Phase 0 intentionally has no product tables.
+- `drizzle/` contains ordered migrations; the latest Phase 1A migration is part of readiness.
 - `compose.yaml` is only for local PostgreSQL development.
 - `docs/implementation/taskfella-analysis.md` is the authoritative phased implementation plan.
 

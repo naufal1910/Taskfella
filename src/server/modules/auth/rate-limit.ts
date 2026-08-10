@@ -1,0 +1,173 @@
+import { createHash } from "node:crypto";
+import { and, eq, lte } from "drizzle-orm";
+import { type Database } from "@/server/db/client";
+import { authRateLimits } from "@/server/db/schema";
+import { AppError } from "@/server/http/errors";
+
+export interface RateLimitPolicy {
+  maxAttempts: number;
+  windowMs: number;
+}
+
+export interface RateLimitResult {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  retryAfterSeconds: number;
+}
+
+export const AUTH_RATE_LIMITS = {
+  login: { maxAttempts: 10, windowMs: 15 * 60 * 1000 },
+  signup: { maxAttempts: 5, windowMs: 60 * 60 * 1000 },
+  emailVerification: { maxAttempts: 5, windowMs: 60 * 60 * 1000 },
+  passwordReset: { maxAttempts: 5, windowMs: 60 * 60 * 1000 },
+  oauthFailure: { maxAttempts: 10, windowMs: 15 * 60 * 1000 },
+} as const satisfies Record<string, RateLimitPolicy>;
+
+function validatePolicy(policy: RateLimitPolicy): void {
+  if (
+    !Number.isInteger(policy.maxAttempts) ||
+    policy.maxAttempts < 1 ||
+    policy.maxAttempts > 1000 ||
+    !Number.isInteger(policy.windowMs) ||
+    policy.windowMs < 1000 ||
+    policy.windowMs > 24 * 60 * 60 * 1000
+  ) {
+    throw new Error("Rate-limit policy is outside the supported bounds.");
+  }
+}
+
+/** Hash operation and subject together so email/IP identifiers are not retained. */
+export function rateLimitKey(operation: string, subject: string): string {
+  if (
+    typeof operation !== "string" ||
+    operation.length === 0 ||
+    operation.length > 128 ||
+    typeof subject !== "string" ||
+    subject.length === 0 ||
+    subject.length > 512
+  ) {
+    throw new Error("Rate-limit key input is invalid.");
+  }
+
+  return createHash("sha256")
+    .update(`taskfella-rate-limit:${operation}:${subject}`, "utf8")
+    .digest("hex");
+}
+
+/**
+ * Atomically consume one attempt from a bounded PostgreSQL fixed-window bucket.
+ * The insert establishes a row for new keys; the row lock makes reset, allow,
+ * and deny decisions single-winner under concurrent requests.
+ */
+export async function consumeRateLimit(
+  db: Database,
+  input: { operation: string; subject: string },
+  policy: RateLimitPolicy,
+  now = new Date(),
+): Promise<RateLimitResult> {
+  validatePolicy(policy);
+  if (!Number.isFinite(now.getTime())) {
+    throw new Error("Rate-limit timestamp is invalid.");
+  }
+
+  const keyHash = rateLimitKey(input.operation, input.subject);
+  const windowEnd = new Date(now.getTime() + policy.windowMs);
+
+  return db.transaction(async (tx) => {
+    await tx
+      .insert(authRateLimits)
+      .values({
+        keyHash,
+        attempts: 0,
+        windowStartedAt: now,
+        expiresAt: windowEnd,
+        updatedAt: now,
+      })
+      .onConflictDoNothing({ target: authRateLimits.keyHash });
+
+    const [current] = await tx
+      .select()
+      .from(authRateLimits)
+      .where(eq(authRateLimits.keyHash, keyHash))
+      .for("update");
+
+    if (!current) {
+      throw new Error("Rate-limit state could not be read.");
+    }
+
+    if (current.expiresAt.getTime() <= now.getTime()) {
+      await tx
+        .update(authRateLimits)
+        .set({
+          attempts: 1,
+          windowStartedAt: now,
+          expiresAt: windowEnd,
+          updatedAt: now,
+        })
+        .where(eq(authRateLimits.keyHash, keyHash));
+
+      return {
+        allowed: true,
+        limit: policy.maxAttempts,
+        remaining: policy.maxAttempts - 1,
+        retryAfterSeconds: Math.ceil(policy.windowMs / 1000),
+      };
+    }
+
+    if (current.attempts >= policy.maxAttempts) {
+      return {
+        allowed: false,
+        limit: policy.maxAttempts,
+        remaining: 0,
+        retryAfterSeconds: Math.max(
+          1,
+          Math.ceil((current.expiresAt.getTime() - now.getTime()) / 1000),
+        ),
+      };
+    }
+
+    const attempts = current.attempts + 1;
+    await tx
+      .update(authRateLimits)
+      .set({ attempts, updatedAt: now })
+      .where(
+        and(
+          eq(authRateLimits.keyHash, keyHash),
+          lte(authRateLimits.attempts, policy.maxAttempts - 1),
+        ),
+      );
+
+    return {
+      allowed: true,
+      limit: policy.maxAttempts,
+      remaining: policy.maxAttempts - attempts,
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil((current.expiresAt.getTime() - now.getTime()) / 1000),
+      ),
+    };
+  });
+}
+
+/** Remove expired buckets in a maintenance call without touching live limits. */
+export async function pruneExpiredRateLimits(db: Database, now = new Date()): Promise<number> {
+  const deleted = await db
+    .delete(authRateLimits)
+    .where(lte(authRateLimits.expiresAt, now))
+    .returning({ keyHash: authRateLimits.keyHash });
+  return deleted.length;
+}
+
+export async function enforceRateLimit(
+  db: Database,
+  input: { operation: string; subject: string },
+  policy: RateLimitPolicy,
+  now = new Date(),
+): Promise<RateLimitResult> {
+  const result = await consumeRateLimit(db, input, policy, now);
+  if (!result.allowed) {
+    throw new AppError("RATE_LIMITED");
+  }
+  return result;
+}

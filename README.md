@@ -2,7 +2,7 @@
 
 Taskfella is an open-source, personal-first, board-first workspace for focused execution. It will bring Kanban planning, Pomodoro focus, manual time tracking, and personal analytics into one calm daily workflow.
 
-This repository currently contains **Phase 0: the application foundation**. It intentionally does not implement authentication, boards, tasks, timers, analytics, exports, or other later-phase product behavior.
+This repository currently contains **Phase 0 plus Phase 1A: the application and authentication foundation**. It intentionally does not implement signup/login pages, email delivery, Google OAuth routes, boards, tasks, timers, analytics, exports, or other later-phase product behavior.
 
 ## Quick start
 
@@ -44,7 +44,7 @@ A migrated, reachable database returns HTTP `200` with `status: "ok"`. An unavai
 | `pnpm start`                     | Serve the production build                                       |
 | `pnpm db:stop`                   | Stop local PostgreSQL                                            |
 
-The full local quality pass is `pnpm validate`. Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. No external or private secret is needed for Phase 0.
+The full local quality pass is `pnpm validate`. Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. Phase 1A uses database-backed opaque random tokens and needs no external or private authentication secret.
 
 ## Production container
 
@@ -64,9 +64,11 @@ Run `pnpm db:migrate` as a deployment step against the target database before st
 
 - [Approved product specification](docs/specification/taskfella-mvp-design.md)
 - [Approved implementation analysis and phased plan](docs/implementation/taskfella-analysis.md)
-- [Phase 0 documentation index](docs/README.md)
+- [Phase 0 and Phase 1A documentation index](docs/README.md)
+- [Phase 1A authentication foundation](docs/implementation/taskfella-phase1a-auth.md)
 - [Public roadmap](https://github.com/users/naufal1910/projects/4)
 - [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2)
+- [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13)
 
 ## License
 
