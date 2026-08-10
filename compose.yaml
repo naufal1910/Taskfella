@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: taskfella
+      POSTGRES_USER: taskfella
+      POSTGRES_PASSWORD: taskfella
+    # Use 5433 on the host so the foundation can coexist with other local projects.
+    ports:
+      - "5433:5432"
+    volumes:
+      - taskfella-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskfella -d taskfella"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  taskfella-postgres:

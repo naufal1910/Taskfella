@@ -1,0 +1,3 @@
+# The approved source documents are copied byte-for-byte; preserve their authored whitespace.
+docs/specification/*.md whitespace=-trailing-space,-blank-at-eof
+docs/implementation/*.md whitespace=-trailing-space,-blank-at-eof
