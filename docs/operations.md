@@ -5,7 +5,7 @@
 ```bash
 cp .env.example .env
 pnpm install --frozen-lockfile
-docker compose up -d db
+docker compose up -d --wait db
 pnpm db:migrate
 pnpm db:check
 pnpm dev

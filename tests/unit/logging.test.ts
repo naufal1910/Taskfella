@@ -5,12 +5,15 @@ describe("structured logging", () => {
   it("emits only allow-listed technical context", () => {
     const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    logger.info("health_check_succeeded", {
+    const context = {
       requestId: "request-1",
       correlationId: "trace-1",
       status: 200,
       component: "health",
-    });
+      password: "fixture-password",
+      content: "fixture-content",
+    };
+    logger.info("health_check_succeeded", context);
 
     const record = JSON.parse(output.mock.calls[0]?.[0] as string) as Record<string, unknown>;
     expect(record).toMatchObject({

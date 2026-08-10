@@ -9,7 +9,7 @@ Use Node.js 20.9 or newer, pnpm 11 or newer, and Docker Compose.
 ```bash
 cp .env.example .env
 pnpm install --frozen-lockfile
-docker compose up -d db
+docker compose up -d --wait db
 pnpm db:migrate
 pnpm dev
 ```
