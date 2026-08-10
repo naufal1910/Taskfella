@@ -1,4 +1,4 @@
-# Phase 0 operations
+# Foundation operations
 
 ## Local lifecycle
 

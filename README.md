@@ -68,6 +68,7 @@ Run `pnpm db:migrate` as a deployment step against the target database before st
 - [Phase 1A authentication foundation](docs/implementation/taskfella-phase1a-auth.md)
 - [Public roadmap](https://github.com/users/naufal1910/projects/4)
 - [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2)
+- [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13)
 
 ## License
 
