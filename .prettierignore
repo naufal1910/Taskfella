@@ -1,0 +1,6 @@
+node_modules
+.next
+coverage
+pnpm-lock.yaml
+docs/specification/taskfella-mvp-design.md
+docs/implementation/taskfella-analysis.md

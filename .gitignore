@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+coverage/
+.DS_Store
+*.log
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+# Local database volume and editor files
+postgres-data/
+.vscode/
+.idea/
