@@ -17,8 +17,8 @@ Compose publishes PostgreSQL on host port `5433` (the container remains on port 
 
 `GET /api/health` performs a connectivity and migration-ledger readiness check. It returns:
 
-- `200` and `status: "ok"` when the application is running and PostgreSQL has the Drizzle migration ledger;
-- `503` and `status: "degraded"` when PostgreSQL is unavailable or migrations have not been applied.
+- `200` and `status: "ok"` when the application is running and PostgreSQL has the current Phase 0 migration applied;
+- `503` and `status: "degraded"` when PostgreSQL is unavailable or the current migration has not been applied.
 
 Responses include request and correlation IDs for support while excluding connection strings, exception details, and user content.
 
