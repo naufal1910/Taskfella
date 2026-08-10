@@ -35,16 +35,8 @@ function write(level: LogLevel, event: string, context: LogContext = {}): void {
 
   // The explicit allow-list keeps user content, credentials, and exception details
   // out of logs by construction. Add technical fields here only when they are safe.
-  const {
-    requestId,
-    correlationId,
-    method,
-    path,
-    status,
-    durationMs,
-    errorCode,
-    component,
-  } = context;
+  const { requestId, correlationId, method, path, status, durationMs, errorCode, component } =
+    context;
   const record = {
     timestamp: new Date().toISOString(),
     service: "taskfella",
