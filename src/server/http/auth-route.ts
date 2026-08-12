@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isIP } from "node:net";
 import { type AppEnv, getEnvironment } from "@/server/config/env";
 import { type Database, getDatabase } from "@/server/db/client";
 import { AppError, appErrorResponse, toAppError } from "@/server/http/errors";
@@ -95,10 +96,24 @@ export async function parseJsonObject(request: Request): Promise<Record<string, 
   return value as Record<string, unknown>;
 }
 
-function clientSubject(request: Request): string {
-  const value = (request as Request & { ip?: unknown }).ip;
-  const subject = typeof value === "string" ? value.trim() : "";
-  return subject.length > 0 && subject.length <= 128 ? subject : "anonymous-client";
+function clientSubject(request: Request, environment: AppEnv): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  const real = request.headers.get("x-real-ip");
+  const hasForwardingHeaders = forwarded !== null || real !== null;
+
+  if (environment.AUTH_TRUSTED_PROXY !== true) {
+    if (hasForwardingHeaders || environment.NODE_ENV === "production") {
+      throw new AppError("FORBIDDEN");
+    }
+    return "local-client";
+  }
+
+  const subject = real?.trim() || forwarded?.split(",", 1)[0]?.trim() || "";
+  if (subject.length === 0 || subject.length > 128 || isIP(subject) === 0) {
+    throw new AppError("FORBIDDEN");
+  }
+
+  return subject;
 }
 
 /** Consume both a client and, when available, an identity bucket. */
@@ -109,9 +124,10 @@ export async function enforceAuthRateLimits(
   identity?: string,
 ): Promise<void> {
   const policy = AUTH_RATE_LIMITS[operation];
+  const environment = getEnvironment();
   const client = await consumeRateLimit(
     db,
-    { operation: `auth:${operation}:client`, subject: clientSubject(request) },
+    { operation: `auth:${operation}:client`, subject: clientSubject(request, environment) },
     policy,
   );
   if (!client.allowed) {

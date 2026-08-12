@@ -32,34 +32,36 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     await enforceAuthRateLimits(request, db, "signup", input.email);
 
-    let created;
-    try {
-      created = await createAccountWithPasswordAndVerification(db, input);
-    } catch (error) {
-      if (!isUniqueConstraintViolation(error)) {
-        throw error;
+    let deliveryAttempted = false;
+    let deliveryFailed = false;
+    const dispatchResult = await dispatchEmailWithinWindow(async () => {
+      let created;
+      try {
+        created = await createAccountWithPasswordAndVerification(db, input);
+      } catch (error) {
+        if (!isUniqueConstraintViolation(error)) {
+          throw error;
+        }
       }
-    }
 
-    const createdAccount = created;
-    const dispatchResult = await dispatchEmailWithinWindow(
-      createdAccount
-        ? async () => {
-            const environment = context.environment ?? getEnvironment();
-            const sender = createEmailSender(environment);
-            await sender.sendVerificationEmail({
-              to: createdAccount.account.email,
-              link: createApplicationLink(
-                "/verify-email",
-                createdAccount.verification.token,
-                environment,
-              ),
-              expiresAt: createdAccount.verification.expiresAt,
-            });
-          }
-        : undefined,
-    );
-    if (dispatchResult === "failed" || dispatchResult === "timed-out") {
+      if (!created) {
+        return;
+      }
+
+      deliveryAttempted = true;
+      try {
+        const environment = context.environment ?? getEnvironment();
+        const sender = createEmailSender(environment);
+        await sender.sendVerificationEmail({
+          to: created.account.email,
+          link: createApplicationLink("/verify-email", created.verification.token, environment),
+          expiresAt: created.verification.expiresAt,
+        });
+      } catch {
+        deliveryFailed = true;
+      }
+    });
+    if (deliveryAttempted && (deliveryFailed || dispatchResult === "timed-out")) {
       logger.error("verification_message_dispatch_failed", {
         requestId: context.requestId,
         correlationId: context.correlationId,

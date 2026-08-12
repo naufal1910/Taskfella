@@ -24,11 +24,15 @@ The check is tied to the migration hash in `src/server/db/client.ts`, not merely
 
 Responses include request and correlation IDs for support while excluding connection strings, exception details, and user content.
 
+## Authentication client addresses
+
+`AUTH_TRUSTED_PROXY=false` is safe for direct local development and rejects forwarding headers. Production configuration requires `AUTH_TRUSTED_PROXY=true` and a reverse proxy that strips incoming `X-Real-IP` and `X-Forwarded-For` values before setting one from the connecting client. Requests without a valid trusted address are rejected instead of sharing one production rate-limit bucket.
+
 ## Local transactional email
 
 Phase 1B defaults non-production environments to `EMAIL_DELIVERY_MODE=local`. Verification and reset messages are written as mode `0600` JSON artifacts below the ignored `.local/mail/` directory; they are not logged or returned by an API. Inspect with `ls -lt .local/mail/` and clean up with `rm -rf .local/mail/`. Set `EMAIL_LOCAL_CAPTURE_DIR` to a temporary directory in automated tests when needed.
 
-Production startup rejects local delivery. Set `EMAIL_DELIVERY_MODE=smtp`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM`, then configure the documented port, TLS mode, and optional paired SMTP credentials. The app uses the portable SMTP transport and never falls back to local capture.
+Production startup rejects local delivery. Set `AUTH_TRUSTED_PROXY=true` behind the trusted edge, then set `EMAIL_DELIVERY_MODE=smtp`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM`, and configure the documented port, TLS mode, and optional paired SMTP credentials. The app uses the portable SMTP transport and never falls back to local capture.
 
 ## Production lifecycle
 

@@ -11,7 +11,7 @@ import { POST as forgot } from "@/app/api/auth/forgot-password/route";
 import { POST as reset } from "@/app/api/auth/reset-password/route";
 import { GET as account } from "@/app/api/account/route";
 import { closeDatabase, getDatabase } from "@/server/db/client";
-import { accounts, authRateLimits, passwordResetTokens } from "@/server/db/schema";
+import { accounts, passwordResetTokens } from "@/server/db/schema";
 import { createAccount, setPasswordCredential } from "@/server/modules/auth/accounts";
 import { createSession, lookupSession } from "@/server/modules/auth/sessions";
 import {
@@ -24,14 +24,12 @@ import { hashBearerToken } from "@/server/modules/auth/tokens";
 import { resetEnvironmentForTests } from "@/server/config/env";
 import { AppError } from "@/server/http/errors";
 import { enforceAuthRateLimits } from "@/server/http/auth-route";
-import { rateLimitKey } from "@/server/modules/auth/rate-limit";
 
 const integration = process.env.DATABASE_URL ? describe : describe.skip;
 const db = process.env.DATABASE_URL ? getDatabase() : undefined;
 const mailDirectory = path.join(process.cwd(), ".local", "mail-phase1b-test");
 const createdAccountIds: string[] = [];
 let requestNumber = 0;
-const clientPrefix = crypto.randomUUID();
 
 function uniqueEmail(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}@example.test`;
@@ -64,8 +62,7 @@ function request(
     origin: "http://localhost:3000",
     cookie: cookies.join("; "),
     "x-csrf-token": csrf,
-    "x-forwarded-for":
-      options.forwardedFor ?? `198.51.100.${clientPrefix}-${requestNumber++}`,
+    "x-forwarded-for": options.forwardedFor ?? `2001:db8::${requestNumber++}`,
   });
   if (options.body !== undefined) headers.set("content-type", "application/json");
   return new Request(`http://localhost:3000${pathname}`, {
@@ -101,6 +98,7 @@ integration("Phase 1B email/password route behavior", () => {
   beforeAll(async () => {
     process.env.EMAIL_DELIVERY_MODE = "local";
     process.env.EMAIL_LOCAL_CAPTURE_DIR = mailDirectory;
+    process.env.AUTH_TRUSTED_PROXY = "true";
     resetEnvironmentForTests();
     await rm(mailDirectory, { recursive: true, force: true });
   });
@@ -322,12 +320,15 @@ integration("Phase 1B email/password route behavior", () => {
     const replacement = uniquePassword("login-reset-replacement");
     const created = await createAccount(db, { email });
     await setPasswordCredential(db, created.id, password);
-    await db.update(accounts).set({ emailVerifiedAt: new Date() }).where(eq(accounts.id, created.id));
+    await db
+      .update(accounts)
+      .set({ emailVerifiedAt: new Date() })
+      .where(eq(accounts.id, created.id));
     const issued = await issuePasswordResetToken(db, created.id);
     expect(issued).not.toBeNull();
 
     const [loginResult, resetResult] = await Promise.all([
-      authenticateAndIssueSession(db, email, password),
+      authenticateAndIssueSession(db, { email, password }),
       resetPasswordWithToken(db, issued!.reset.token, replacement),
     ]);
 
@@ -405,27 +406,24 @@ integration("Phase 1B email/password route behavior", () => {
     expect(attempts.filter((response) => response.status === 429)).not.toHaveLength(0);
   });
 
-  it("does not let forged forwarding addresses bypass the client limiter", async () => {
+  it("rejects forwarding addresses when the proxy trust contract is disabled", async () => {
     if (!db) return;
-    const clientKey = rateLimitKey("auth:oauthFailure:client", "anonymous-client");
-    await db.delete(authRateLimits).where(eq(authRateLimits.keyHash, clientKey));
+    const original = process.env.AUTH_TRUSTED_PROXY;
+    process.env.AUTH_TRUSTED_PROXY = "false";
+    resetEnvironmentForTests();
+    try {
+      const result = await enforceAuthRateLimits(
+        request("/api/auth/login", { forwardedFor: "203.0.113.10" }),
+        db,
+        "oauthFailure",
+        `unique-identity-${crypto.randomUUID()}`,
+      ).catch((error: unknown) => error);
 
-    const results = await Promise.allSettled(
-      Array.from({ length: 11 }, (_, index) =>
-        enforceAuthRateLimits(
-          request("/api/auth/login", {
-            forwardedFor: `203.0.113.${index}`,
-          }),
-          db,
-          "oauthFailure",
-          `unique-identity-${crypto.randomUUID()}`,
-        ),
-      ),
-    );
-
-    const limited = results.filter(
-      (result) => result.status === "rejected" && result.reason instanceof AppError,
-    );
-    expect(limited).toHaveLength(1);
+      expect(result).toMatchObject({ code: "FORBIDDEN" });
+      expect(result).toBeInstanceOf(AppError);
+    } finally {
+      process.env.AUTH_TRUSTED_PROXY = original;
+      resetEnvironmentForTests();
+    }
   });
 });

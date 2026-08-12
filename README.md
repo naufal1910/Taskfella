@@ -48,6 +48,8 @@ The full local quality pass is `pnpm validate`. Database-backed tests require th
 
 In local or test environments, email verification and password-reset messages are captured as JSON files under `.local/mail/` (ignored by git). Inspect the latest message with `ls -lt .local/mail/` and remove the directory with `rm -rf .local/mail/` when finished. Local capture is selected explicitly by `EMAIL_DELIVERY_MODE=local`; production configuration is rejected unless `EMAIL_DELIVERY_MODE=smtp` and an SMTP host and sender are supplied. Set the documented SMTP placeholders in the deployment environment, never in a commit.
 
+Production authentication rate limits require `AUTH_TRUSTED_PROXY=true` behind an edge that strips and sets `X-Real-IP` or `X-Forwarded-For`; direct local development keeps it false and rejects forwarding headers.
+
 ## Production container
 
 Build and run the standalone production image with values supplied at runtime:
@@ -57,6 +59,7 @@ docker build -t taskfella:local .
 docker run --rm -p 3000:3000 \
   -e DATABASE_URL='postgresql://user:password@host:5432/taskfella' \
   -e APP_URL='https://taskfella.example' \
+  -e AUTH_TRUSTED_PROXY='true' \
   -e EMAIL_DELIVERY_MODE='smtp' \
   -e EMAIL_SMTP_HOST='smtp.example' \
   -e EMAIL_SMTP_PORT='587' \

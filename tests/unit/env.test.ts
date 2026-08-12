@@ -17,6 +17,7 @@ describe("environment validation", () => {
       APP_URL: "http://localhost:3000",
       LOG_LEVEL: "warn",
       DB_POOL_MAX: 4,
+      AUTH_TRUSTED_PROXY: false,
       EMAIL_DELIVERY_MODE: "local",
       EMAIL_LOCAL_CAPTURE_DIR: ".local/mail",
       EMAIL_SMTP_HOST: undefined,
@@ -50,6 +51,20 @@ describe("environment validation", () => {
     ).toThrow(/DATABASE_URL|DB_POOL_MAX/);
   });
 
+  it("rejects credential-bearing and insecure production application URLs", () => {
+    expect(() =>
+      parseEnvironment({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://taskfella:taskfella@localhost:5432/taskfella",
+        APP_URL: "http://user:secret@taskfella.example",
+        AUTH_TRUSTED_PROXY: "true",
+        EMAIL_DELIVERY_MODE: "smtp",
+        EMAIL_SMTP_HOST: "smtp.example",
+        EMAIL_FROM: "Taskfella <no-reply@example>",
+      }),
+    ).toThrow(/APP_URL/);
+  });
+
   it("requires explicit SMTP delivery settings in production", () => {
     expect(() =>
       parseEnvironment({
@@ -64,6 +79,7 @@ describe("environment validation", () => {
         NODE_ENV: "production",
         DATABASE_URL: "postgresql://taskfella:taskfella@localhost:5432/taskfella",
         APP_URL: "https://taskfella.example",
+        AUTH_TRUSTED_PROXY: "true",
         EMAIL_DELIVERY_MODE: "smtp",
         EMAIL_SMTP_HOST: "smtp.example",
         EMAIL_FROM: "Taskfella <no-reply@example>",
@@ -73,6 +89,7 @@ describe("environment validation", () => {
       EMAIL_DELIVERY_MODE: "smtp",
       EMAIL_SMTP_HOST: "smtp.example",
       EMAIL_SMTP_SECURE: true,
+      AUTH_TRUSTED_PROXY: true,
     });
   });
 });

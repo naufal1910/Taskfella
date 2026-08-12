@@ -17,6 +17,10 @@ const environmentSchema = z
       }),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
     DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
+    AUTH_TRUSTED_PROXY: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     EMAIL_DELIVERY_MODE: z.enum(["local", "smtp"]).default("local"),
     EMAIL_LOCAL_CAPTURE_DIR: z.string().min(1).default(".local/mail"),
     EMAIL_SMTP_HOST: z.string().min(1).optional(),
@@ -30,8 +34,37 @@ const environmentSchema = z
     EMAIL_FROM: z.string().min(1).optional(),
   })
   .superRefine((value, context) => {
+    let appUrl: URL;
+    try {
+      appUrl = new URL(value.APP_URL);
+    } catch {
+      return;
+    }
+    if (appUrl.username || appUrl.password) {
+      context.addIssue({
+        code: "custom",
+        path: ["APP_URL"],
+        message: "APP_URL must not contain credentials",
+      });
+    }
+
     if (value.NODE_ENV !== "production") {
       return;
+    }
+
+    if (appUrl.protocol !== "https:") {
+      context.addIssue({
+        code: "custom",
+        path: ["APP_URL"],
+        message: "production APP_URL must use HTTPS",
+      });
+    }
+    if (!value.AUTH_TRUSTED_PROXY) {
+      context.addIssue({
+        code: "custom",
+        path: ["AUTH_TRUSTED_PROXY"],
+        message: "production requires a trusted proxy address",
+      });
     }
 
     if (value.EMAIL_DELIVERY_MODE !== "smtp") {
@@ -73,8 +106,13 @@ type ParsedEnvironment = z.infer<typeof environmentSchema>;
 // allowing Phase 1B email settings to be omitted outside the sender boundary.
 export type AppEnv = Omit<
   ParsedEnvironment,
-  "EMAIL_DELIVERY_MODE" | "EMAIL_LOCAL_CAPTURE_DIR" | "EMAIL_SMTP_PORT" | "EMAIL_SMTP_SECURE"
+  | "AUTH_TRUSTED_PROXY"
+  | "EMAIL_DELIVERY_MODE"
+  | "EMAIL_LOCAL_CAPTURE_DIR"
+  | "EMAIL_SMTP_PORT"
+  | "EMAIL_SMTP_SECURE"
 > & {
+  AUTH_TRUSTED_PROXY?: ParsedEnvironment["AUTH_TRUSTED_PROXY"];
   EMAIL_DELIVERY_MODE?: ParsedEnvironment["EMAIL_DELIVERY_MODE"];
   EMAIL_LOCAL_CAPTURE_DIR?: ParsedEnvironment["EMAIL_LOCAL_CAPTURE_DIR"];
   EMAIL_SMTP_PORT?: ParsedEnvironment["EMAIL_SMTP_PORT"];
@@ -89,6 +127,7 @@ function selectEnvironment(input: EnvironmentInput): Record<string, string | und
     APP_URL: input.APP_URL,
     LOG_LEVEL: input.LOG_LEVEL,
     DB_POOL_MAX: input.DB_POOL_MAX,
+    AUTH_TRUSTED_PROXY: input.AUTH_TRUSTED_PROXY,
     EMAIL_DELIVERY_MODE: input.EMAIL_DELIVERY_MODE,
     EMAIL_LOCAL_CAPTURE_DIR: input.EMAIL_LOCAL_CAPTURE_DIR,
     EMAIL_SMTP_HOST: input.EMAIL_SMTP_HOST,

@@ -32,22 +32,29 @@ export async function POST(request: Request): Promise<NextResponse> {
     const db = databaseFor(context);
     await enforceAuthRateLimits(request, db, "passwordReset", email);
 
-    const account = await getAccountByNormalizedEmail(db, email);
-    const issued = account ? await issuePasswordResetToken(db, account.id) : null;
-    const dispatchResult = await dispatchEmailWithinWindow(
-      issued
-        ? async () => {
-            const environment = context.environment ?? getEnvironment();
-            const sender = createEmailSender(environment);
-            await sender.sendPasswordResetEmail({
-              to: issued.account.email,
-              link: createApplicationLink("/reset-password", issued.reset.token, environment),
-              expiresAt: issued.reset.expiresAt,
-            });
-          }
-        : undefined,
-    );
-    if (dispatchResult === "failed" || dispatchResult === "timed-out") {
+    let deliveryAttempted = false;
+    let deliveryFailed = false;
+    const dispatchResult = await dispatchEmailWithinWindow(async () => {
+      const account = await getAccountByNormalizedEmail(db, email);
+      const issued = account ? await issuePasswordResetToken(db, account.id) : null;
+      if (!issued) {
+        return;
+      }
+
+      deliveryAttempted = true;
+      try {
+        const environment = context.environment ?? getEnvironment();
+        const sender = createEmailSender(environment);
+        await sender.sendPasswordResetEmail({
+          to: issued.account.email,
+          link: createApplicationLink("/reset-password", issued.reset.token, environment),
+          expiresAt: issued.reset.expiresAt,
+        });
+      } catch {
+        deliveryFailed = true;
+      }
+    });
+    if (deliveryAttempted && (deliveryFailed || dispatchResult === "timed-out")) {
       logger.error("password_reset_message_dispatch_failed", {
         requestId: context.requestId,
         correlationId: context.correlationId,

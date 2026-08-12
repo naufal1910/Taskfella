@@ -30,18 +30,29 @@ export async function dispatchEmailWithinWindow(
   const outcome = dispatch
     ? Promise.resolve()
         .then(dispatch)
-        .then<EmailDispatchResult>(
-          () => "sent",
-          () => "failed",
+        .then(
+          () => ({ status: "completed" as const }),
+          (error) => ({ status: "rejected" as const, error }),
         )
-    : Promise.resolve<EmailDispatchResult>("skipped");
-  const timeout = wait(Math.max(0, deadline - Date.now())).then(() => "timed-out" as const);
+    : Promise.resolve({ status: "completed" as const });
+  const timeout = wait(Math.max(0, deadline - Date.now())).then(() => ({
+    status: "timed-out" as const,
+  }));
   const result = await Promise.race([outcome, timeout]);
+  if (result.status === "timed-out") {
+    return "timed-out";
+  }
+
   const remaining = deadline - Date.now();
   if (remaining > 0) {
     await wait(remaining);
   }
-  return result;
+
+  if (result.status === "rejected") {
+    throw result.error;
+  }
+
+  return dispatch ? "sent" : "skipped";
 }
 
 interface CapturedMessage {
