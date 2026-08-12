@@ -7,15 +7,9 @@ import {
   parseJsonObject,
   requireAuthCsrf,
 } from "@/server/http/auth-route";
-import { getAccountByNormalizedEmail, verifyAccountPassword } from "@/server/modules/auth/accounts";
 import { parseEmailPassword } from "@/server/modules/auth/input";
 import { getSessionToken, setSessionCookie } from "@/server/modules/auth/cookies";
-import {
-  createSession,
-  lookupSession,
-  rotateSession,
-  revokeSession,
-} from "@/server/modules/auth/sessions";
+import { authenticateAndIssueSession } from "@/server/modules/auth/lifecycle";
 import { AppError } from "@/server/http/errors";
 
 export const dynamic = "force-dynamic";
@@ -29,42 +23,30 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     await enforceAuthRateLimits(request, db, "login", input.email);
 
-    const account = await getAccountByNormalizedEmail(db, input.email);
-    const validPassword = account
-      ? await verifyAccountPassword(db, account.id, input.password)
-      : false;
-    if (!account || !validPassword) {
+    const result = await authenticateAndIssueSession(db, {
+      ...input,
+      presentedToken: getSessionToken(request),
+    });
+    if (result.state === "invalid-credentials") {
       throw new AppError("INVALID_CREDENTIALS");
     }
-    if (!account.emailVerifiedAt) {
+    if (result.state === "unverified") {
       throw new AppError("EMAIL_NOT_VERIFIED");
     }
-
-    const presentedToken = getSessionToken(request);
-    let issued = null;
-    if (presentedToken) {
-      const existing = await lookupSession(db, presentedToken);
-      if (existing?.accountId === account.id) {
-        issued = await rotateSession(db, presentedToken);
-      } else {
-        await revokeSession(db, presentedToken, "login-replaced");
-      }
-    }
-    issued ??= await createSession(db, account.id);
 
     const response = noStoreResponse(
       {
         ok: true,
         account: {
-          id: account.id,
-          email: account.email,
-          emailVerifiedAt: account.emailVerifiedAt,
+          id: result.account.id,
+          email: result.account.email,
+          emailVerifiedAt: result.account.emailVerifiedAt,
         },
       },
       200,
       context,
     );
-    setSessionCookie(response, issued.token, issued.session.expiresAt, context.environment);
+    setSessionCookie(response, result.token, result.expiresAt, context.environment);
     return response;
   });
 }

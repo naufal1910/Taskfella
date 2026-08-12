@@ -15,6 +15,35 @@ export interface EmailSender {
   sendPasswordResetEmail(input: TransactionalEmailInput): Promise<void>;
 }
 
+export const EMAIL_DISPATCH_WINDOW_MS = 250;
+export type EmailDispatchResult = "skipped" | "sent" | "failed" | "timed-out";
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+export async function dispatchEmailWithinWindow(
+  dispatch?: () => Promise<void>,
+  windowMs = EMAIL_DISPATCH_WINDOW_MS,
+): Promise<EmailDispatchResult> {
+  const deadline = Date.now() + windowMs;
+  const outcome = dispatch
+    ? Promise.resolve()
+        .then(dispatch)
+        .then<EmailDispatchResult>(
+          () => "sent",
+          () => "failed",
+        )
+    : Promise.resolve<EmailDispatchResult>("skipped");
+  const timeout = wait(Math.max(0, deadline - Date.now())).then(() => "timed-out" as const);
+  const result = await Promise.race([outcome, timeout]);
+  const remaining = deadline - Date.now();
+  if (remaining > 0) {
+    await wait(remaining);
+  }
+  return result;
+}
+
 interface CapturedMessage {
   kind: "verification" | "password-reset";
   to: string;
@@ -129,6 +158,7 @@ export class SmtpEmailSender implements EmailSender {
       host: environment.EMAIL_SMTP_HOST,
       port: environment.EMAIL_SMTP_PORT ?? 587,
       secure: environment.EMAIL_SMTP_SECURE ?? false,
+      requireTLS: !(environment.EMAIL_SMTP_SECURE ?? false),
       ...(environment.EMAIL_SMTP_USER && environment.EMAIL_SMTP_PASSWORD
         ? {
             auth: {

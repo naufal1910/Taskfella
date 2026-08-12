@@ -11,15 +11,20 @@ import { POST as forgot } from "@/app/api/auth/forgot-password/route";
 import { POST as reset } from "@/app/api/auth/reset-password/route";
 import { GET as account } from "@/app/api/account/route";
 import { closeDatabase, getDatabase } from "@/server/db/client";
-import { accounts, passwordResetTokens } from "@/server/db/schema";
+import { accounts, authRateLimits, passwordResetTokens } from "@/server/db/schema";
 import { createAccount, setPasswordCredential } from "@/server/modules/auth/accounts";
 import { createSession, lookupSession } from "@/server/modules/auth/sessions";
 import {
+  authenticateAndIssueSession,
   createAccountWithPasswordAndVerification,
   issuePasswordResetToken,
+  resetPasswordWithToken,
 } from "@/server/modules/auth/lifecycle";
 import { hashBearerToken } from "@/server/modules/auth/tokens";
 import { resetEnvironmentForTests } from "@/server/config/env";
+import { AppError } from "@/server/http/errors";
+import { enforceAuthRateLimits } from "@/server/http/auth-route";
+import { rateLimitKey } from "@/server/modules/auth/rate-limit";
 
 const integration = process.env.DATABASE_URL ? describe : describe.skip;
 const db = process.env.DATABASE_URL ? getDatabase() : undefined;
@@ -44,7 +49,13 @@ function cookieValue(response: Response, name: string): string | undefined {
 
 function request(
   pathname: string,
-  options: { method?: string; body?: unknown; session?: string; csrf?: string } = {},
+  options: {
+    method?: string;
+    body?: unknown;
+    session?: string;
+    csrf?: string;
+    forwardedFor?: string;
+  } = {},
 ): Request {
   const csrf = options.csrf ?? `csrf-${crypto.randomUUID()}`;
   const cookies = [`taskfella_csrf=${encodeURIComponent(csrf)}`];
@@ -53,7 +64,8 @@ function request(
     origin: "http://localhost:3000",
     cookie: cookies.join("; "),
     "x-csrf-token": csrf,
-    "x-forwarded-for": `198.51.100.${clientPrefix}-${requestNumber++}`,
+    "x-forwarded-for":
+      options.forwardedFor ?? `198.51.100.${clientPrefix}-${requestNumber++}`,
   });
   if (options.body !== undefined) headers.set("content-type", "application/json");
   return new Request(`http://localhost:3000${pathname}`, {
@@ -303,6 +315,32 @@ integration("Phase 1B email/password route behavior", () => {
     expect(await lookupSession(db, secondSession.token)).toBeNull();
   });
 
+  it("serializes login session issuance with a concurrent password reset", async () => {
+    if (!db) return;
+    const email = uniqueEmail("login-reset-race");
+    const password = uniquePassword("login-reset-race");
+    const replacement = uniquePassword("login-reset-replacement");
+    const created = await createAccount(db, { email });
+    await setPasswordCredential(db, created.id, password);
+    await db.update(accounts).set({ emailVerifiedAt: new Date() }).where(eq(accounts.id, created.id));
+    const issued = await issuePasswordResetToken(db, created.id);
+    expect(issued).not.toBeNull();
+
+    const [loginResult, resetResult] = await Promise.all([
+      authenticateAndIssueSession(db, email, password),
+      resetPasswordWithToken(db, issued!.reset.token, replacement),
+    ]);
+
+    expect(resetResult).toEqual({ accountId: created.id });
+    if (loginResult.state === "authenticated") {
+      expect(await lookupSession(db, loginResult.token)).toBeNull();
+    } else {
+      expect(loginResult).toEqual({ state: "invalid-credentials" });
+    }
+
+    createdAccountIds.push(created.id);
+  });
+
   it("does not reuse a foreign browser session when logging into another account", async () => {
     if (!db) return;
     const targetEmail = uniqueEmail("target");
@@ -365,5 +403,29 @@ integration("Phase 1B email/password route behavior", () => {
       ),
     );
     expect(attempts.filter((response) => response.status === 429)).not.toHaveLength(0);
+  });
+
+  it("does not let forged forwarding addresses bypass the client limiter", async () => {
+    if (!db) return;
+    const clientKey = rateLimitKey("auth:oauthFailure:client", "anonymous-client");
+    await db.delete(authRateLimits).where(eq(authRateLimits.keyHash, clientKey));
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 11 }, (_, index) =>
+        enforceAuthRateLimits(
+          request("/api/auth/login", {
+            forwardedFor: `203.0.113.${index}`,
+          }),
+          db,
+          "oauthFailure",
+          `unique-identity-${crypto.randomUUID()}`,
+        ),
+      ),
+    );
+
+    const limited = results.filter(
+      (result) => result.status === "rejected" && result.reason instanceof AppError,
+    );
+    expect(limited).toHaveLength(1);
   });
 });

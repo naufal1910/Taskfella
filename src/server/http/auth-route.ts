@@ -96,10 +96,9 @@ export async function parseJsonObject(request: Request): Promise<Record<string, 
 }
 
 function clientSubject(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",", 1)[0]?.trim();
-  const direct = request.headers.get("x-real-ip")?.trim();
-  const value = forwarded || direct;
-  return value && value.length <= 128 ? value : "anonymous-client";
+  const value = (request as Request & { ip?: unknown }).ip;
+  const subject = typeof value === "string" ? value.trim() : "";
+  return subject.length > 0 && subject.length <= 128 ? subject : "anonymous-client";
 }
 
 /** Consume both a client and, when available, an identity bucket. */

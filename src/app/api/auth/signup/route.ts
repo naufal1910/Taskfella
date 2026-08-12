@@ -11,7 +11,11 @@ import {
 import { isUniqueConstraintViolation } from "@/server/modules/auth/accounts";
 import { createAccountWithPasswordAndVerification } from "@/server/modules/auth/lifecycle";
 import { parseEmailPassword } from "@/server/modules/auth/input";
-import { createApplicationLink, createEmailSender } from "@/server/modules/auth/email-sender";
+import {
+  createApplicationLink,
+  createEmailSender,
+  dispatchEmailWithinWindow,
+} from "@/server/modules/auth/email-sender";
 import { logger } from "@/server/observability/logger";
 
 export const dynamic = "force-dynamic";
@@ -32,25 +36,30 @@ export async function POST(request: Request): Promise<NextResponse> {
     try {
       created = await createAccountWithPasswordAndVerification(db, input);
     } catch (error) {
-      if (isUniqueConstraintViolation(error)) {
-        return noStoreResponse(
-          { ok: true, status: "pending", message: SIGNUP_MESSAGE },
-          202,
-          context,
-        );
+      if (!isUniqueConstraintViolation(error)) {
+        throw error;
       }
-      throw error;
     }
 
-    try {
-      const environment = context.environment ?? getEnvironment();
-      const sender = createEmailSender(environment);
-      await sender.sendVerificationEmail({
-        to: created.account.email,
-        link: createApplicationLink("/verify-email", created.verification.token, environment),
-        expiresAt: created.verification.expiresAt,
-      });
-    } catch {
+    const createdAccount = created;
+    const dispatchResult = await dispatchEmailWithinWindow(
+      createdAccount
+        ? async () => {
+            const environment = context.environment ?? getEnvironment();
+            const sender = createEmailSender(environment);
+            await sender.sendVerificationEmail({
+              to: createdAccount.account.email,
+              link: createApplicationLink(
+                "/verify-email",
+                createdAccount.verification.token,
+                environment,
+              ),
+              expiresAt: createdAccount.verification.expiresAt,
+            });
+          }
+        : undefined,
+    );
+    if (dispatchResult === "failed" || dispatchResult === "timed-out") {
       logger.error("verification_message_dispatch_failed", {
         requestId: context.requestId,
         correlationId: context.correlationId,
@@ -58,7 +67,6 @@ export async function POST(request: Request): Promise<NextResponse> {
         errorCode: "EMAIL_DELIVERY_FAILED",
         component: "authentication",
       });
-      // Keep signup non-enumerating. The user can retry through the resend flow.
     }
 
     return noStoreResponse({ ok: true, status: "pending", message: SIGNUP_MESSAGE }, 202, context);

@@ -1,8 +1,14 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { LocalEmailSender, createApplicationLink } from "@/server/modules/auth/email-sender";
+import {
+  EMAIL_DISPATCH_WINDOW_MS,
+  LocalEmailSender,
+  SmtpEmailSender,
+  createApplicationLink,
+  dispatchEmailWithinWindow,
+} from "@/server/modules/auth/email-sender";
 
 const environment = {
   NODE_ENV: "test" as const,
@@ -10,6 +16,15 @@ const environment = {
   APP_URL: "http://localhost:3000",
   LOG_LEVEL: "info" as const,
   DB_POOL_MAX: 10,
+};
+
+const smtpEnvironment = {
+  ...environment,
+  EMAIL_DELIVERY_MODE: "smtp" as const,
+  EMAIL_SMTP_HOST: "smtp.example.test",
+  EMAIL_SMTP_PORT: 587,
+  EMAIL_SMTP_SECURE: false,
+  EMAIL_FROM: "Taskfella <no-reply@example.test>",
 };
 
 const temporaryDirectories: string[] = [];
@@ -23,6 +38,30 @@ afterEach(async () => {
 });
 
 describe("transactional email boundary", () => {
+  it("holds absent and slow dispatches to the same bounded response window", async () => {
+    vi.useFakeTimers();
+    try {
+      const skipped = dispatchEmailWithinWindow();
+      const slow = dispatchEmailWithinWindow(() => new Promise<void>(() => undefined));
+
+      await vi.advanceTimersByTimeAsync(EMAIL_DISPATCH_WINDOW_MS);
+
+      await expect(skipped).resolves.toBe("skipped");
+      await expect(slow).resolves.toBe("timed-out");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("requires STARTTLS when SMTP is not using implicit TLS", () => {
+    const sender = new SmtpEmailSender(smtpEnvironment);
+    const transport = (sender as unknown as {
+      transporter: { options: { requireTLS?: boolean } };
+    }).transporter;
+
+    expect(transport.options.requireTLS).toBe(true);
+  });
+
   it("captures minimal verification and reset evidence locally without provider credentials", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "taskfella-mail-"));
     temporaryDirectories.push(directory);

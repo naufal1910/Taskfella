@@ -15,8 +15,9 @@ import {
   PASSWORD_RESET_TOKEN_TTL_MS,
   type IssuedToken,
 } from "./tokens";
-import { hashPassword, validatePasswordInput } from "./password";
+import { hashPassword, validatePasswordInput, verifyPasswordWithFallback } from "./password";
 import { normalizeEmail, validateEmail } from "./accounts";
+import { SESSION_TTL_MS } from "./sessions";
 
 export type OneTimeTokenState = "valid" | "invalid" | "expired" | "already-used" | "superseded";
 
@@ -29,6 +30,11 @@ export interface SignupResult {
   account: Account;
   verification: IssuedToken;
 }
+
+export type LoginResult =
+  | { state: "invalid-credentials" }
+  | { state: "unverified"; account: Account }
+  | { state: "authenticated"; account: Account; token: string; expiresAt: Date };
 
 function expiryFrom(now: Date, ttlMs: number): Date {
   if (!Number.isFinite(now.getTime()) || !Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -165,6 +171,111 @@ export async function issueVerificationToken(
     }
 
     return { account, verification: { ...created, token, expiresAt } };
+  });
+}
+
+export async function authenticateAndIssueSession(
+  db: Database,
+  input: { email: string; password: string; presentedToken?: string; now?: Date },
+): Promise<LoginResult> {
+  const normalizedEmail = validateEmail(input.email);
+  const now = input.now ?? new Date();
+
+  return db.transaction(async (tx): Promise<LoginResult> => {
+    const [account] = await tx
+      .select()
+      .from(accounts)
+      .where(eq(accounts.normalizedEmail, normalizedEmail))
+      .for("update");
+    const [credential] = account
+      ? await tx
+          .select({ passwordHash: passwordCredentials.passwordHash })
+          .from(passwordCredentials)
+          .where(eq(passwordCredentials.accountId, account.id))
+          .limit(1)
+      : [];
+    const validPassword = await verifyPasswordWithFallback(input.password, credential?.passwordHash);
+
+    if (!account || !validPassword) {
+      return { state: "invalid-credentials" };
+    }
+    if (!account.emailVerifiedAt) {
+      return { state: "unverified", account };
+    }
+
+    const presentedHash = input.presentedToken ? hashTokenOrNull(input.presentedToken) : null;
+    let issued: { token: string; expiresAt: Date } | undefined;
+
+    if (presentedHash) {
+      const [existing] = await tx
+        .select({
+          id: sessions.id,
+          accountId: sessions.accountId,
+          expiresAt: sessions.expiresAt,
+        })
+        .from(sessions)
+        .where(and(eq(sessions.tokenHash, presentedHash), isNull(sessions.revokedAt)))
+        .for("update");
+
+      if (existing?.accountId === account.id && existing.expiresAt.getTime() > now.getTime()) {
+        const [revoked] = await tx
+          .update(sessions)
+          .set({ revokedAt: now, revokedReason: "rotated" })
+          .where(and(eq(sessions.id, existing.id), isNull(sessions.revokedAt)))
+          .returning({ id: sessions.id });
+        if (!revoked) {
+          throw new Error("Presented session could not be rotated.");
+        }
+
+        const replacementToken = generateOpaqueToken();
+        const replacementExpiresAt = expiryFrom(now, SESSION_TTL_MS);
+        const [replacement] = await tx
+          .insert(sessions)
+          .values({
+            accountId: account.id,
+            tokenHash: hashBearerToken(replacementToken),
+            expiresAt: replacementExpiresAt,
+            createdAt: now,
+            lastAccessedAt: now,
+          })
+          .returning({ id: sessions.id, expiresAt: sessions.expiresAt });
+        if (!replacement) {
+          throw new Error("Replacement session could not be created.");
+        }
+
+        await tx
+          .update(sessions)
+          .set({ replacedBySessionId: replacement.id })
+          .where(eq(sessions.id, existing.id));
+        issued = { token: replacementToken, expiresAt: replacement.expiresAt };
+      } else if (existing) {
+        await tx
+          .update(sessions)
+          .set({ revokedAt: now, revokedReason: "login-replaced" })
+          .where(and(eq(sessions.id, existing.id), isNull(sessions.revokedAt)));
+      }
+    }
+
+    if (!issued) {
+      const token = generateOpaqueToken();
+      const expiresAt = expiryFrom(now, SESSION_TTL_MS);
+      const [session] = await tx
+        .insert(sessions)
+        .values({
+          accountId: account.id,
+          tokenHash: hashBearerToken(token),
+          expiresAt,
+          createdAt: now,
+          lastAccessedAt: now,
+        })
+        .returning({ expiresAt: sessions.expiresAt });
+      if (!session) {
+        throw new Error("Session could not be created.");
+      }
+      issued = { token, expiresAt: session.expiresAt };
+    }
+
+    return { state: "authenticated", account, ...issued };
   });
 }
 
