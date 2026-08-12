@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   authRoute,
   databaseFor,
+  enforceAuthRateLimits,
   noStoreResponse,
   parseJsonObject,
   requireAuthCsrf,
@@ -16,8 +17,10 @@ export const runtime = "nodejs";
 export async function POST(request: Request): Promise<NextResponse> {
   return authRoute(request, async (context) => {
     requireAuthCsrf(request, context);
+    const db = databaseFor(context);
+    await enforceAuthRateLimits(request, db, "emailVerification");
     const token = parseToken((await parseJsonObject(request)).token);
-    const outcome = await verifyEmailAddress(databaseFor(context), token);
+    const outcome = await verifyEmailAddress(db, token);
 
     if (outcome.state === "verified" || outcome.state === "already-verified") {
       return noStoreResponse(

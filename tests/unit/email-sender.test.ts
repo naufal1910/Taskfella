@@ -70,11 +70,50 @@ describe("transactional email boundary", () => {
 
   it("requires STARTTLS when SMTP is not using implicit TLS", () => {
     const sender = new SmtpEmailSender(smtpEnvironment);
-    const transport = (sender as unknown as {
-      transporter: { options: { requireTLS?: boolean } };
-    }).transporter;
+    const transport = (
+      sender as unknown as {
+        transporter: {
+          options: {
+            requireTLS?: boolean;
+            dnsTimeout?: number;
+            connectionTimeout?: number;
+            greetingTimeout?: number;
+            socketTimeout?: number;
+          };
+        };
+      }
+    ).transporter;
 
     expect(transport.options.requireTLS).toBe(true);
+    expect(transport.options.dnsTimeout).toBe(5_000);
+    expect(transport.options.connectionTimeout).toBe(5_000);
+    expect(transport.options.greetingTimeout).toBe(5_000);
+    expect(transport.options.socketTimeout).toBe(10_000);
+  });
+
+  it("closes the SMTP transport after a delivery attempt", async () => {
+    const sender = new SmtpEmailSender(smtpEnvironment);
+    const transport = (
+      sender as unknown as {
+        transporter: {
+          sendMail: (input: unknown) => Promise<unknown>;
+          close: () => void;
+        };
+      }
+    ).transporter;
+    const sendMail = vi.spyOn(transport, "sendMail").mockRejectedValue(new Error("smtp failure"));
+    const close = vi.spyOn(transport, "close");
+
+    await expect(
+      sender.sendVerificationEmail({
+        to: "person@example.test",
+        link: createApplicationLink("/verify-email", crypto.randomUUID(), smtpEnvironment),
+        expiresAt: new Date("2026-08-13T00:00:00.000Z"),
+      }),
+    ).rejects.toThrow("smtp failure");
+
+    expect(sendMail).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("captures minimal verification and reset evidence locally without provider credentials", async () => {

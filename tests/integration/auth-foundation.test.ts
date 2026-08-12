@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { getDatabase, closeDatabase } from "@/server/db/client";
 import {
   accounts,
+  authRateLimits,
   passwordCredentials,
   emailVerificationTokens,
   passwordResetTokens,
@@ -28,7 +29,7 @@ import {
   revokeSessionById,
   rotateSession,
 } from "@/server/modules/auth/sessions";
-import { consumeRateLimit } from "@/server/modules/auth/rate-limit";
+import { consumeRateLimit, rateLimitKey } from "@/server/modules/auth/rate-limit";
 import { protectedRoute } from "@/server/http/authentication";
 
 const integration = process.env.DATABASE_URL ? describe : describe.skip;
@@ -237,6 +238,35 @@ integration("database-backed authentication foundation", () => {
         )
       ).allowed,
     ).toBe(true);
+  });
+
+  it("prunes expired buckets during shared rate-limit consumption", async () => {
+    if (!db) return;
+    const now = new Date();
+    const staleKey = rateLimitKey("maintenance", crypto.randomUUID());
+    const activeSubject = crypto.randomUUID();
+    const activeKey = rateLimitKey("maintenance", activeSubject);
+    await db.insert(authRateLimits).values({
+      keyHash: staleKey,
+      attempts: 1,
+      windowStartedAt: new Date(now.getTime() - 2_000),
+      expiresAt: new Date(now.getTime() - 1_000),
+      updatedAt: new Date(now.getTime() - 1_000),
+    });
+
+    await consumeRateLimit(
+      db,
+      { operation: "maintenance", subject: activeSubject },
+      { maxAttempts: 3, windowMs: 60_000 },
+      now,
+    );
+
+    const staleRows = await db
+      .select({ keyHash: authRateLimits.keyHash })
+      .from(authRateLimits)
+      .where(eq(authRateLimits.keyHash, staleKey));
+    expect(staleRows).toHaveLength(0);
+    await db.delete(authRateLimits).where(eq(authRateLimits.keyHash, activeKey));
   });
 
   it("cascades authentication records when an account is deleted", async () => {

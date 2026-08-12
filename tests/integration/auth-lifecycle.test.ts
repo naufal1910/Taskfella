@@ -404,6 +404,18 @@ integration("Phase 1B email/password route behavior", () => {
       ),
     );
     expect(attempts.filter((response) => response.status === 429)).not.toHaveLength(0);
+
+    const verificationAttempts = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        verify(
+          request("/api/auth/verify-email", {
+            body: { token: crypto.randomUUID() },
+            forwardedFor: "198.51.100.40",
+          }),
+        ),
+      ),
+    );
+    expect(verificationAttempts.filter((response) => response.status === 429)).not.toHaveLength(0);
   });
 
   it("rejects forwarding addresses when the proxy trust contract is disabled", async () => {

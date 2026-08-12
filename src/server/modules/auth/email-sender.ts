@@ -18,6 +18,11 @@ export interface EmailSender {
 export const EMAIL_DISPATCH_WINDOW_MS = 250;
 export type EmailDispatchResult = "skipped" | "sent" | "failed" | "timed-out";
 
+const SMTP_DNS_TIMEOUT_MS = 5_000;
+const SMTP_CONNECTION_TIMEOUT_MS = 5_000;
+const SMTP_GREETING_TIMEOUT_MS = 5_000;
+const SMTP_SOCKET_TIMEOUT_MS = 10_000;
+
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -170,6 +175,10 @@ export class SmtpEmailSender implements EmailSender {
       port: environment.EMAIL_SMTP_PORT ?? 587,
       secure: environment.EMAIL_SMTP_SECURE ?? false,
       requireTLS: !(environment.EMAIL_SMTP_SECURE ?? false),
+      dnsTimeout: SMTP_DNS_TIMEOUT_MS,
+      connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+      greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+      socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
       ...(environment.EMAIL_SMTP_USER && environment.EMAIL_SMTP_PASSWORD
         ? {
             auth: {
@@ -190,13 +199,17 @@ export class SmtpEmailSender implements EmailSender {
   }
 
   private async send(message: CapturedMessage): Promise<void> {
-    await this.transporter.sendMail({
-      from: message.from,
-      to: message.to,
-      subject: message.subject,
-      text: message.text,
-      html: message.html,
-    });
+    try {
+      await this.transporter.sendMail({
+        from: message.from,
+        to: message.to,
+        subject: message.subject,
+        text: message.text,
+        html: message.html,
+      });
+    } finally {
+      this.transporter.close();
+    }
   }
 }
 
