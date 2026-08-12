@@ -62,6 +62,16 @@ Run `pnpm db:migrate` as a deployment step against the target database before st
 
 ## Project documents
 
+- [Canonical visual design contract](DESIGN.md)
+
+The design contract can be checked without adding a project dependency:
+
+```bash
+npx -y @google/design.md lint DESIGN.md
+```
+
+The validator must report zero errors and zero warnings.
+
 - [Approved product specification](docs/specification/taskfella-mvp-design.md)
 - [Approved implementation analysis and phased plan](docs/implementation/taskfella-analysis.md)
 - [Phase 0 and Phase 1A documentation index](docs/README.md)
@@ -69,6 +79,7 @@ Run `pnpm db:migrate` as a deployment step against the target database before st
 - [Public roadmap](https://github.com/users/naufal1910/projects/4)
 - [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2)
 - [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13)
+- [Calm Execution UI foundation issue](https://github.com/naufal1910/Taskfella/issues/19)
 
 ## License
 

@@ -2,6 +2,8 @@
 
 import "./globals.css";
 
+import { Button } from "@/components/ui/primitives";
+
 export default function GlobalError({
   reset,
 }: {
@@ -15,9 +17,9 @@ export default function GlobalError({
           <p className="eyebrow">Taskfella</p>
           <h1>The application needs a fresh start.</h1>
           <p>Refresh the foundation and try again.</p>
-          <button className="primary-action button-action" type="button" onClick={reset}>
+          <Button type="button" onClick={reset}>
             Try again
-          </button>
+          </Button>
         </main>
       </body>
     </html>

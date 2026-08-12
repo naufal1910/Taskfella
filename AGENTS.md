@@ -7,6 +7,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 ## Foundation pointers
 
 - `README.md` is the contributor quick start and command reference.
+- `DESIGN.md` is the canonical visual contract; validate it with `npx -y @google/design.md lint DESIGN.md` and require zero errors and zero warnings.
 - `docs/implementation/taskfella-analysis.md` is the approved phased implementation plan; `docs/implementation/taskfella-phase1a-auth.md` records the authentication-foundation security decisions.
 - `src/server/db/schema.ts` and ordered `drizzle/` migrations are the source of truth for Phase 1A authentication tables.
 - `GET /api/health` is the executable readiness contract; `pnpm db:migrate` must run before a healthy response is expected, including after a new migration.
