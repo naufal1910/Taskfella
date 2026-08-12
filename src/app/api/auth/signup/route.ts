@@ -32,23 +32,28 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     await enforceAuthRateLimits(request, db, "signup", input.email);
 
-    let deliveryAttempted = false;
-    let deliveryFailed = false;
-    const dispatchResult = await dispatchEmailWithinWindow(async () => {
+    await dispatchEmailWithinWindow(async () => {
       let created;
       try {
         created = await createAccountWithPasswordAndVerification(db, input);
       } catch (error) {
-        if (!isUniqueConstraintViolation(error)) {
-          throw error;
+        if (isUniqueConstraintViolation(error)) {
+          return;
         }
+        logger.error("verification_message_dispatch_failed", {
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          status: 503,
+          errorCode: "EMAIL_DELIVERY_FAILED",
+          component: "authentication",
+        });
+        return;
       }
 
       if (!created) {
         return;
       }
 
-      deliveryAttempted = true;
       try {
         const environment = context.environment ?? getEnvironment();
         const sender = createEmailSender(environment);
@@ -58,18 +63,15 @@ export async function POST(request: Request): Promise<NextResponse> {
           expiresAt: created.verification.expiresAt,
         });
       } catch {
-        deliveryFailed = true;
+        logger.error("verification_message_dispatch_failed", {
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          status: 503,
+          errorCode: "EMAIL_DELIVERY_FAILED",
+          component: "authentication",
+        });
       }
     });
-    if (deliveryAttempted && (deliveryFailed || dispatchResult === "timed-out")) {
-      logger.error("verification_message_dispatch_failed", {
-        requestId: context.requestId,
-        correlationId: context.correlationId,
-        status: 503,
-        errorCode: "EMAIL_DELIVERY_FAILED",
-        component: "authentication",
-      });
-    }
 
     return noStoreResponse({ ok: true, status: "pending", message: SIGNUP_MESSAGE }, 202, context);
   });

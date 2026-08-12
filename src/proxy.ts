@@ -18,9 +18,11 @@ export function proxy(request: NextRequest): NextResponse {
     pathname === "/logout" ||
     pathname === "/forgot-password" ||
     pathname === "/reset-password" ||
+    pathname === "/reset-password/" ||
     pathname.startsWith("/verify-email")
   ) {
     response.headers.set("cache-control", "no-store");
+    response.headers.set("referrer-policy", "no-referrer");
   }
   return response;
 }

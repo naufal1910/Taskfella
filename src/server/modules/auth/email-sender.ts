@@ -49,7 +49,7 @@ export async function dispatchEmailWithinWindow(
   }
 
   if (result.status === "rejected") {
-    throw result.error;
+    return "failed";
   }
 
   return dispatch ? "sent" : "skipped";

@@ -479,12 +479,11 @@ export async function resetPasswordWithToken(
   password: string,
   now = new Date(),
 ): Promise<{ accountId: string } | { state: Exclude<OneTimeTokenState, "valid"> }> {
-  validatePasswordInput(password);
-  const passwordHash = await hashPassword(password);
   const tokenHash = hashTokenOrNull(token);
   if (!tokenHash) {
     return { state: "invalid" };
   }
+  validatePasswordInput(password);
 
   return db.transaction(async (tx) => {
     const [candidate] = await tx
@@ -535,6 +534,8 @@ export async function resetPasswordWithToken(
     if (state !== "valid") {
       return { state };
     }
+
+    const passwordHash = await hashPassword(password);
 
     const [consumed] = await tx
       .update(passwordResetTokens)

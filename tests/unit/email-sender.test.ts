@@ -53,6 +53,21 @@ describe("transactional email boundary", () => {
     }
   });
 
+  it("contains dispatch failures within the generic response window", async () => {
+    vi.useFakeTimers();
+    try {
+      const failed = dispatchEmailWithinWindow(async () => {
+        throw new Error("delivery failure");
+      });
+
+      await vi.advanceTimersByTimeAsync(EMAIL_DISPATCH_WINDOW_MS);
+
+      await expect(failed).resolves.toBe("failed");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("requires STARTTLS when SMTP is not using implicit TLS", () => {
     const sender = new SmtpEmailSender(smtpEnvironment);
     const transport = (sender as unknown as {

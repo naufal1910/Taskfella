@@ -31,18 +31,15 @@ export async function POST(request: Request): Promise<NextResponse> {
     const db = databaseFor(context);
     await enforceAuthRateLimits(request, db, "emailVerification", email);
 
-    let deliveryAttempted = false;
-    let deliveryFailed = false;
-    const dispatchResult = await dispatchEmailWithinWindow(async () => {
-      const account = await getAccountByNormalizedEmail(db, email);
-      const issued =
-        account && !account.emailVerifiedAt ? await issueVerificationToken(db, account.id) : null;
-      if (!issued) {
-        return;
-      }
-
-      deliveryAttempted = true;
+    await dispatchEmailWithinWindow(async () => {
       try {
+        const account = await getAccountByNormalizedEmail(db, email);
+        const issued =
+          account && !account.emailVerifiedAt ? await issueVerificationToken(db, account.id) : null;
+        if (!issued) {
+          return;
+        }
+
         const environment = context.environment ?? getEnvironment();
         const sender = createEmailSender(environment);
         await sender.sendVerificationEmail({
@@ -51,18 +48,15 @@ export async function POST(request: Request): Promise<NextResponse> {
           expiresAt: issued.verification.expiresAt,
         });
       } catch {
-        deliveryFailed = true;
+        logger.error("verification_resend_dispatch_failed", {
+          requestId: context.requestId,
+          correlationId: context.correlationId,
+          status: 503,
+          errorCode: "EMAIL_DELIVERY_FAILED",
+          component: "authentication",
+        });
       }
     });
-    if (deliveryAttempted && (deliveryFailed || dispatchResult === "timed-out")) {
-      logger.error("verification_resend_dispatch_failed", {
-        requestId: context.requestId,
-        correlationId: context.correlationId,
-        status: 503,
-        errorCode: "EMAIL_DELIVERY_FAILED",
-        component: "authentication",
-      });
-    }
 
     return noStoreResponse(
       { ok: true, status: "pending", message: VERIFICATION_MESSAGE },
