@@ -64,13 +64,8 @@ Run `pnpm db:migrate` as a deployment step against the target database before st
 
 - [Canonical visual design contract](DESIGN.md)
 
-The design contract can be checked without adding a project dependency:
-
-```bash
-npx -y @google/design.md lint DESIGN.md
-```
-
-The validator must report zero errors and zero warnings.
+The contributor-facing validator command and zero-error/zero-warning requirement are documented in
+[CONTRIBUTING](CONTRIBUTING.md).
 
 - [Approved product specification](docs/specification/taskfella-mvp-design.md)
 - [Approved implementation analysis and phased plan](docs/implementation/taskfella-analysis.md)
