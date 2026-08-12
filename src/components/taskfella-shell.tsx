@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { BrandMark, Button, StatusBadge, Surface } from "@/components/ui/primitives";
+
 const foundationChecks = [
   {
     label: "Responsive application shell",
@@ -23,9 +25,7 @@ export function TaskfellaShell() {
     <div className="site-frame">
       <header className="site-header">
         <Link className="brand" href="/" aria-label="Taskfella home">
-          <span className="brand-mark" aria-hidden="true">
-            T
-          </span>
+          <BrandMark />
           <span>Taskfella</span>
         </Link>
         <nav className="site-nav" aria-label="Primary navigation">
@@ -47,21 +47,24 @@ export function TaskfellaShell() {
             Taskfella is building a focused, board-first workspace for personal projects. The
             application foundation is ready for the product layers ahead.
           </p>
-          <a className="primary-action" href="#status">
+          <Button href="#status">
             Explore the foundation <span aria-hidden="true">↓</span>
-          </a>
+          </Button>
         </section>
 
-        <section id="status" className="status-card" aria-labelledby="status-title">
+        <Surface
+          as="section"
+          id="status"
+          className="status-card"
+          elevated
+          aria-labelledby="status-title"
+        >
           <div className="status-heading">
             <div>
               <p className="eyebrow">System foundation</p>
               <h2 id="status-title">A dependable beginning.</h2>
             </div>
-            <span className="status-indicator">
-              <span className="status-dot" aria-hidden="true" />
-              Ready
-            </span>
+            <StatusBadge status="success">Ready</StatusBadge>
           </div>
           <div className="check-list">
             {foundationChecks.map((check) => (
@@ -77,7 +80,7 @@ export function TaskfellaShell() {
               </article>
             ))}
           </div>
-        </section>
+        </Surface>
       </main>
 
       <footer className="site-footer">
