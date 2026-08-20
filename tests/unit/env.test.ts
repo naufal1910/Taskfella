@@ -113,6 +113,14 @@ describe("environment validation", () => {
 
     expect(() => parseEnvironment({ ...base, NODE_ENV: "production" })).toThrow(/GOOGLE/);
     expect(() =>
+      parseEnvironment({
+        ...base,
+        NODE_ENV: "production",
+        GOOGLE_CLIENT_ID: "your-client-id.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "supply-at-runtime",
+      }),
+    ).toThrow(/GOOGLE/);
+    expect(() =>
       parseEnvironment({ ...base, NODE_ENV: "development", APP_URL: "http://localhost:3000" }),
     ).not.toThrow();
   });

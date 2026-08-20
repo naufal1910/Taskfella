@@ -90,4 +90,15 @@ describe("Google OAuth boundary", () => {
       getGoogleOAuthConfig({ ...environment, GOOGLE_CLIENT_SECRET: undefined }),
     ).toThrowError(expect.objectContaining({ code: new AppError("OAUTH_NOT_CONFIGURED").code }));
   });
+
+  it("rejects documented placeholders in production at the provider boundary", () => {
+    expect(() =>
+      getGoogleOAuthConfig({
+        ...environment,
+        NODE_ENV: "production",
+        GOOGLE_CLIENT_ID: "your-client-id.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "supply-at-runtime",
+      }),
+    ).toThrowError(expect.objectContaining({ code: new AppError("OAUTH_NOT_CONFIGURED").code }));
+  });
 });

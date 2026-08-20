@@ -147,7 +147,7 @@ const environmentSchema = z
 export function isGoogleOAuthPlaceholder(value: string | undefined): boolean {
   return Boolean(
     value &&
-    /(?:replace-with-|placeholder|local-google|(?:^|[-_.])(example|dummy|fake|sample|changeme|test)(?:$|[-_.]))/i.test(
+    /(?:replace-with-|placeholder|local-google|your-client-id|supply-at-runtime|(?:^|[-_.])(example|dummy|fake|sample|changeme|test)(?:$|[-_.]))/i.test(
       value,
     ),
   );
