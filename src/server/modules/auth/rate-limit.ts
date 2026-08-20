@@ -79,6 +79,8 @@ export async function consumeRateLimit(
 
   const keyHash = rateLimitKey(input.operation, input.subject);
   const windowEnd = new Date(now.getTime() + policy.windowMs);
+  const nowIso = now.toISOString();
+  const windowEndIso = windowEnd.toISOString();
 
   return db.transaction(async (tx) => {
     const [consumed] = await tx
@@ -95,26 +97,26 @@ export async function consumeRateLimit(
         set: {
           attempts: sql`
             CASE
-              WHEN ${authRateLimits.expiresAt} <= ${now} THEN 1
+              WHEN ${authRateLimits.expiresAt} <= ${nowIso} THEN 1
               ELSE ${authRateLimits.attempts} + 1
             END
           `,
           windowStartedAt: sql`
             CASE
-              WHEN ${authRateLimits.expiresAt} <= ${now} THEN ${now}
+              WHEN ${authRateLimits.expiresAt} <= ${nowIso} THEN ${nowIso}
               ELSE ${authRateLimits.windowStartedAt}
             END
           `,
           expiresAt: sql`
             CASE
-              WHEN ${authRateLimits.expiresAt} <= ${now} THEN ${windowEnd}
+              WHEN ${authRateLimits.expiresAt} <= ${nowIso} THEN ${windowEndIso}
               ELSE ${authRateLimits.expiresAt}
             END
           `,
           updatedAt: now,
         },
         setWhere: sql`
-          ${authRateLimits.expiresAt} <= ${now}
+          ${authRateLimits.expiresAt} <= ${nowIso}
           OR ${authRateLimits.attempts} < ${policy.maxAttempts}
         `,
       })
