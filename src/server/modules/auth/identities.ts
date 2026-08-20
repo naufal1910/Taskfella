@@ -51,6 +51,20 @@ async function findIdentity(
   return identity ?? null;
 }
 
+async function readIdentity(
+  tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  provider: string,
+  subject: string,
+): Promise<OAuthIdentity | null> {
+  const [identity] = await tx
+    .select()
+    .from(oauthIdentities)
+    .where(
+      and(eq(oauthIdentities.provider, provider), eq(oauthIdentities.providerSubject, subject)),
+    );
+  return identity ?? null;
+}
+
 async function findAccount(
   tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
   accountId: string,
@@ -167,7 +181,6 @@ export async function completeGoogleIdentity(
       }
 
       await lockEmailOwnership(tx, normalizedEmail);
-      const existingIdentity = await findIdentity(tx, provider, subject);
       const accountCandidate = await readAccount(tx, input.transaction.accountId);
       if (!accountCandidate) {
         return { state: "session-invalid" };
@@ -188,6 +201,7 @@ export async function completeGoogleIdentity(
       const emailOwner = emailOwnerCandidate
         ? lockedAccounts.find(({ id }) => id === emailOwnerCandidate.id)
         : undefined;
+      const existingIdentity = await findIdentity(tx, provider, subject);
 
       if (existingIdentity && existingIdentity.accountId !== account.id) {
         return { state: "identity-conflict" };
@@ -272,10 +286,14 @@ export async function completeGoogleIdentity(
     }
 
     await lockEmailOwnership(tx, normalizedEmail);
-    const existingIdentity = await findIdentity(tx, provider, subject);
-    if (existingIdentity) {
-      const account = await findAccount(tx, existingIdentity.accountId);
+    const identityCandidate = await readIdentity(tx, provider, subject);
+    if (identityCandidate) {
+      const account = await findAccount(tx, identityCandidate.accountId);
       if (!account) {
+        return { state: "identity-conflict" };
+      }
+      const existingIdentity = await findIdentity(tx, provider, subject);
+      if (!existingIdentity || existingIdentity.accountId !== account.id) {
         return { state: "identity-conflict" };
       }
       const session = await issueSessionForAccountInTransaction(tx, account.id, {
