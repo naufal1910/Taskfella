@@ -14,26 +14,35 @@ let cachedAppearancePreference: AppearancePreference | undefined;
 let cachedAppearanceRevision: string | undefined;
 let cachedAppearanceIdentity: string | undefined;
 let cachedAppearanceGeneration: number | undefined;
-let appearanceLifecycleGeneration = 0;
+let appearanceAuthEpoch = 0;
 
-export function beginAppearanceLifecycle(): number {
+export function beginAppearanceAuthEpoch(): number {
   const sharedGeneration = readAppearanceGeneration();
-  appearanceLifecycleGeneration =
-    Math.max(appearanceLifecycleGeneration, sharedGeneration ?? 0) + 1;
-  writeAppearanceGeneration(appearanceLifecycleGeneration);
-  return appearanceLifecycleGeneration;
+  const random = new Uint32Array(1);
+  const randomValue =
+    typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function"
+      ? crypto.getRandomValues(random)[0] % 1000
+      : Math.floor(Math.random() * 1000);
+  const clockEpoch = Date.now() * 1000 + randomValue;
+  appearanceAuthEpoch = Math.max(
+    appearanceAuthEpoch + 1,
+    sharedGeneration === undefined ? 0 : sharedGeneration + 1,
+    clockEpoch,
+  );
+  writeAppearanceGeneration(appearanceAuthEpoch);
+  return appearanceAuthEpoch;
 }
 
-export function currentAppearanceLifecycleGeneration(): number {
+export function currentAppearanceAuthEpoch(): number {
   const sharedGeneration = readAppearanceGeneration();
   if (sharedGeneration !== undefined) {
-    appearanceLifecycleGeneration = Math.max(appearanceLifecycleGeneration, sharedGeneration);
+    appearanceAuthEpoch = Math.max(appearanceAuthEpoch, sharedGeneration);
   }
-  return appearanceLifecycleGeneration;
+  return appearanceAuthEpoch;
 }
 
-export function isCurrentAppearanceLifecycle(generation: number): boolean {
-  return currentAppearanceLifecycleGeneration() === generation;
+export function isCurrentAppearanceAuthEpoch(epoch: number): boolean {
+  return currentAppearanceAuthEpoch() === epoch;
 }
 
 export function notifyAppearanceChange(

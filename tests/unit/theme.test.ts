@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { themeBootstrap } from "@/app/layout";
 import {
   APPEARANCE_CHANGE_EVENT,
-  beginAppearanceLifecycle,
+  beginAppearanceAuthEpoch,
   cacheAppearancePreference,
   clearAppearancePreferenceCache,
   compareAppearanceRevisions,
@@ -164,7 +164,7 @@ describe("appearance resolution", () => {
       clearAppearancePreferenceCache();
       expect(document.cookie).toContain("taskfella_appearance_generation=12");
 
-      const nextGeneration = beginAppearanceLifecycle();
+      const nextGeneration = beginAppearanceAuthEpoch();
       expect(nextGeneration).toBeGreaterThan(12);
       expect(document.cookie).toContain(`taskfella_appearance_generation=${nextGeneration}`);
     });

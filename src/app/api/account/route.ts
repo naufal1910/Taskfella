@@ -28,6 +28,16 @@ async function serializeSettingsMutation<T>(key: string, operation: () => Promis
   }
 }
 
+function isAccountPatchUnchanged(
+  account: typeof accounts.$inferSelect,
+  patch: Record<string, unknown>,
+): boolean {
+  return Object.entries(patch).every(([key, value]) => {
+    if (!Object.prototype.hasOwnProperty.call(account, key)) return false;
+    return account[key as keyof typeof account] === value;
+  });
+}
+
 type AccountIdentities = Awaited<ReturnType<typeof listAccountOAuthIdentities>>;
 
 export function accountPayload(
@@ -112,17 +122,48 @@ async function update(request: Request): Promise<NextResponse> {
         const patch = parseAccountSettingsPatch(await parseJsonObject(request));
         const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
         const database = getDatabase();
-        if (
-          request.method === "PUT" &&
-          appearancePatch &&
-          Object.keys(patch).length === 1 &&
-          patch.appearance === account.appearance
-        ) {
-          return accountResponse(account, accountVersion);
-        }
         let updated: typeof accounts.$inferSelect | undefined;
-        let appearanceRevision: string | undefined;
-        if (appearancePatch) {
+
+        if (request.method === "PUT") {
+          [updated] = await database.transaction(async (tx) => {
+            await tx.execute(
+              sql`SELECT pg_advisory_xact_lock(hashtext(CAST(${account.id} AS text)))`,
+            );
+            const [current] = await tx
+              .select()
+              .from(accounts)
+              .where(eq(accounts.id, account.id))
+              .for("update");
+            if (!current || isAccountPatchUnchanged(current, patch)) {
+              return current ? [current] : [];
+            }
+            if (appearancePatch) {
+              const expectedRevision = Number.parseInt(accountVersion, 10);
+              if (!Number.isSafeInteger(expectedRevision)) {
+                throw new AppError("CONFLICT");
+              }
+              return tx
+                .update(accounts)
+                .set({
+                  ...patch,
+                  appearanceRevision: sql`${accounts.appearanceRevision} + 1`,
+                  updatedAt: new Date(),
+                })
+                .where(
+                  and(
+                    eq(accounts.id, account.id),
+                    eq(accounts.appearanceRevision, expectedRevision),
+                  ),
+                )
+                .returning();
+            }
+            return tx
+              .update(accounts)
+              .set({ ...patch, updatedAt: new Date() })
+              .where(eq(accounts.id, account.id))
+              .returning();
+          });
+        } else if (appearancePatch) {
           const expectedRevision = Number.parseInt(accountVersion, 10);
           if (!Number.isSafeInteger(expectedRevision)) {
             throw new AppError("CONFLICT");
@@ -155,9 +196,8 @@ async function update(request: Request): Promise<NextResponse> {
           if (appearancePatch) throw new AppError("CONFLICT");
           throw new Error("Account settings could not be saved.");
         }
-        appearanceRevision = String(updated.appearanceRevision);
 
-        return accountResponse(updated, appearanceRevision);
+        return accountResponse(updated, String(updated.appearanceRevision));
       },
       { mutation: true },
     );

@@ -6,12 +6,12 @@ import {
   cacheAppearancePreference,
   clearAppearancePreferenceCache,
   compareAppearanceRevisions,
-  currentAppearanceLifecycleGeneration,
+  currentAppearanceAuthEpoch,
   detectBrowserTimezone,
-  isCurrentAppearanceLifecycle,
+  isCurrentAppearanceAuthEpoch,
   notifyAppearanceChange,
   APPEARANCE_RESET_REVISION,
-  beginAppearanceLifecycle,
+  beginAppearanceAuthEpoch,
   type AppearancePreference,
 } from "@/components/theme/theme";
 import { createAppearanceMutationTracker } from "@/shared/appearance-mutation";
@@ -285,17 +285,17 @@ export function SettingsPanel() {
 
   useEffect(() => {
     let active = true;
-    const requestGeneration = beginAppearanceLifecycle();
+    const requestGeneration = currentAppearanceAuthEpoch();
     void fetch("/api/account", { credentials: "same-origin", cache: "no-store" })
       .then(async (response) => {
         if (!active) return;
         if (response.status === 401) {
-          if (!isCurrentAppearanceLifecycle(requestGeneration)) return;
+          if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
           clearAppearancePreferenceCache();
           appearanceMutationTrackerRef.current.recordSaved("system");
           savedAppearanceRevisionRef.current = APPEARANCE_RESET_REVISION;
           savedAppearanceIdentityRef.current = undefined;
-          const generation = beginAppearanceLifecycle();
+          const generation = beginAppearanceAuthEpoch();
           savedAppearanceGenerationRef.current = generation;
           notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
             generation,
@@ -307,7 +307,7 @@ export function SettingsPanel() {
         if (!response.ok) throw new Error("account");
         const payload = (await response.json()) as { account?: AccountPayload };
         if (!payload.account) throw new Error("account");
-        if (!isCurrentAppearanceLifecycle(requestGeneration)) return;
+        if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
         setAccount(payload.account);
         setValues(valuesFromAccount(payload.account));
         const preference = payload.account.appearance ?? "system";
@@ -342,7 +342,7 @@ export function SettingsPanel() {
     if (key === "appearance") {
       appearanceMutationTrackerRef.current.advance();
       notifyAppearanceChange(value as AppearancePreference, undefined, {
-        generation: currentAppearanceLifecycleGeneration(),
+        generation: currentAppearanceAuthEpoch(),
       });
     }
     setValues((current) => (current ? { ...current, [key]: value } : current));
@@ -358,14 +358,14 @@ export function SettingsPanel() {
 
   async function save(section: Section, patch: Record<string, unknown>): Promise<void> {
     const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
-    const requestGeneration = currentAppearanceLifecycleGeneration();
+    const requestGeneration = currentAppearanceAuthEpoch();
     const appearanceMutationId = appearancePatch
       ? appearanceMutationTrackerRef.current.advance()
       : appearanceMutationTrackerRef.current.current();
     setStatus(undefined);
     setError(undefined);
     const execute = async (): Promise<void> => {
-      if (!isCurrentAppearanceLifecycle(requestGeneration)) return;
+      if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
       if (
         appearancePatch &&
         appearanceMutationId !== undefined &&
@@ -394,14 +394,14 @@ export function SettingsPanel() {
           error?: ApiError;
         };
         if (controller.signal.aborted) return;
-        if (!isCurrentAppearanceLifecycle(requestGeneration)) return;
+        if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
         if (response.status === 401) {
           invalidatePendingSaves();
           clearAppearancePreferenceCache();
           appearanceMutationTrackerRef.current.recordSaved("system");
           savedAppearanceRevisionRef.current = APPEARANCE_RESET_REVISION;
           savedAppearanceIdentityRef.current = undefined;
-          const generation = beginAppearanceLifecycle();
+          const generation = beginAppearanceAuthEpoch();
           savedAppearanceGenerationRef.current = generation;
           notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
             generation,

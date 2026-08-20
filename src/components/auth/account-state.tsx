@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
   APPEARANCE_RESET_REVISION,
-  beginAppearanceLifecycle,
+  beginAppearanceAuthEpoch,
   cacheAppearancePreference,
   clearAppearancePreferenceCache,
-  isCurrentAppearanceLifecycle,
+  currentAppearanceAuthEpoch,
+  isCurrentAppearanceAuthEpoch,
   notifyAppearanceChange,
   type AppearancePreference,
 } from "@/components/theme/theme";
@@ -72,7 +73,7 @@ function LogoutControl() {
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
       clearAppearancePreferenceCache();
-      const generation = beginAppearanceLifecycle();
+      const generation = beginAppearanceAuthEpoch();
       notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
         generation,
         reset: true,
@@ -190,14 +191,14 @@ export function AccountState() {
 
   useEffect(() => {
     let active = true;
-    const requestGeneration = beginAppearanceLifecycle();
+    const requestGeneration = currentAppearanceAuthEpoch();
     void fetch("/api/account", { credentials: "same-origin", cache: "no-store" })
       .then(async (response) => {
         if (!active) return;
         if (response.status === 401) {
-          if (!isCurrentAppearanceLifecycle(requestGeneration)) return;
+          if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
           clearAppearancePreferenceCache();
-          const generation = beginAppearanceLifecycle();
+          const generation = beginAppearanceAuthEpoch();
           notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
             generation,
             reset: true,
@@ -208,7 +209,7 @@ export function AccountState() {
         if (!response.ok) throw new Error("account");
         const payload = (await response.json()) as { account?: AccountPayload };
         if (!payload.account) throw new Error("account");
-        if (!isCurrentAppearanceLifecycle(requestGeneration)) return;
+        if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
         setAccount(payload.account);
         cacheAppearancePreference(
           payload.account.appearance ?? "system",

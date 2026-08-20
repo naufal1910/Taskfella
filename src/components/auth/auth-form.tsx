@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
   APPEARANCE_RESET_REVISION,
-  beginAppearanceLifecycle,
+  beginAppearanceAuthEpoch,
   cacheAppearancePreference,
   clearAppearancePreferenceCache,
   detectBrowserTimezone,
@@ -410,7 +410,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         return;
       }
       const lifecycleGeneration =
-        mode === "login" || mode === "reset" ? beginAppearanceLifecycle() : undefined;
+        mode === "login" || mode === "reset" ? beginAppearanceAuthEpoch() : undefined;
 
       const endpoint =
         mode === "signup"

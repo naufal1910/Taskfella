@@ -120,7 +120,8 @@ integration("Phase 1D account settings routes", () => {
     expect(updated.status).toBe(200);
     expect(updated.headers.get("cache-control")).toBe("no-store");
     expect(updated.headers.get("set-cookie")).toBeNull();
-    expect(await json(updated)).toMatchObject({
+    const updatedBody = await json(updated);
+    expect(updatedBody).toMatchObject({
       account: {
         displayName: "Focused owner",
         timezone: "Asia/Tokyo",
@@ -134,6 +135,30 @@ integration("Phase 1D account settings routes", () => {
           longBreakDurationMinutes: 30,
           longBreakInterval: 3,
         },
+      },
+    });
+
+    const unchangedCompoundPut = await updateAccount(
+      authenticatedRequest("/api/account", session.token, {
+        method: "PUT",
+        body: {
+          displayName: "Focused owner",
+          timezone: "Asia/Tokyo",
+          appearance: "dark",
+          notificationsEnabled: false,
+          soundEnabled: false,
+          focusDurationMinutes: 50,
+          shortBreakDurationMinutes: 10,
+          longBreakDurationMinutes: 30,
+          longBreakInterval: 3,
+        },
+      }),
+    );
+    expect(unchangedCompoundPut.status).toBe(200);
+    expect(await json(unchangedCompoundPut)).toMatchObject({
+      account: {
+        appearanceRevision: updatedBody.account.appearanceRevision,
+        updatedAt: updatedBody.account.updatedAt,
       },
     });
 

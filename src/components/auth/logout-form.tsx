@@ -5,7 +5,7 @@ import { useState } from "react";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
   APPEARANCE_RESET_REVISION,
-  beginAppearanceLifecycle,
+  beginAppearanceAuthEpoch,
   clearAppearancePreferenceCache,
   notifyAppearanceChange,
 } from "@/components/theme/theme";
@@ -41,7 +41,7 @@ export function LogoutForm() {
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
       clearAppearancePreferenceCache();
-      const generation = beginAppearanceLifecycle();
+      const generation = beginAppearanceAuthEpoch();
       notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
         generation,
         reset: true,
