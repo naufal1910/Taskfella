@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { StatusBadge } from "@/components/ui/primitives";
 import {
   type AuthFieldErrors,
   type AuthFormMode,
@@ -19,6 +20,8 @@ interface ApiError {
   code?: string;
   message?: string;
 }
+
+type TokenErrorCode = "TOKEN_EXPIRED" | "TOKEN_ALREADY_USED" | "TOKEN_SUPERSEDED" | "TOKEN_INVALID";
 
 const copy: Record<Exclude<AuthFormMode, "verify" | "resend">, { title: string; intro: string }> = {
   signup: {
@@ -39,6 +42,17 @@ const copy: Record<Exclude<AuthFormMode, "verify" | "resend">, { title: string; 
     intro: "Use a passphrase you will remember. The link is single-use and expires soon.",
   },
 };
+
+const tokenErrorCodes = new Set<TokenErrorCode>([
+  "TOKEN_EXPIRED",
+  "TOKEN_ALREADY_USED",
+  "TOKEN_SUPERSEDED",
+  "TOKEN_INVALID",
+]);
+
+function isTokenErrorCode(code: string | undefined): code is TokenErrorCode {
+  return code !== undefined && tokenErrorCodes.has(code as TokenErrorCode);
+}
 
 function readCookie(name: string): string | undefined {
   const prefix = `${name}=`;
@@ -70,7 +84,10 @@ async function getCsrfToken(): Promise<string> {
   return token;
 }
 
-function errorMessage(code: string | undefined, fallback: string): string {
+export function authErrorMessage(
+  code: string | undefined,
+  fallback = "We could not complete that request. Try again.",
+): string {
   switch (code) {
     case "TOKEN_EXPIRED":
       return "This link has expired. Request a fresh link and try again.";
@@ -79,7 +96,7 @@ function errorMessage(code: string | undefined, fallback: string): string {
     case "TOKEN_SUPERSEDED":
       return "This link was replaced by a newer one. Request a fresh link if you still need one.";
     case "TOKEN_INVALID":
-      return "This link is invalid. Check the message or request a fresh one.";
+      return "This link is invalid. Request a fresh link and try again.";
     case "RATE_LIMITED":
       return "Too many attempts. Wait a while and try again.";
     case "INVALID_CREDENTIALS":
@@ -88,9 +105,162 @@ function errorMessage(code: string | undefined, fallback: string): string {
       return "Verify your email address before signing in, then try again.";
     case "INVALID_REQUEST":
       return "Check your information and try again.";
+    case "EMAIL_DELIVERY_FAILED":
+    case "DATABASE_UNAVAILABLE":
+    case "INTERNAL_ERROR":
+      return "We could not complete that request safely. Try again later.";
     default:
       return fallback;
   }
+}
+
+function AuthFeedback({
+  pending,
+  success,
+  error,
+  pendingMessage = "Working…",
+}: {
+  pending: boolean;
+  success?: string;
+  error?: string;
+  pendingMessage?: string;
+}) {
+  if (!pending && !success && !error) return null;
+
+  const tone = pending ? "pending" : error ? "error" : "success";
+  const label = pending ? "In progress" : error ? "Unable to continue" : "Complete";
+  const message = pending ? pendingMessage : (success ?? error);
+
+  return (
+    <div
+      className={`auth-feedback auth-feedback--${tone}`}
+      role={error ? "alert" : "status"}
+      aria-live={error ? "assertive" : "polite"}
+      aria-atomic="true"
+      aria-busy={pending || undefined}
+    >
+      <strong>{label}</strong>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+function tokenStateCopy(
+  mode: "verify" | "reset",
+  code: TokenErrorCode | undefined,
+  missing: boolean,
+) {
+  const actionHref = mode === "verify" ? "/verify-email/resend" : "/forgot-password";
+  const actionLabel =
+    mode === "verify" ? "Request a fresh verification link" : "Request a new reset link";
+
+  if (missing) {
+    return {
+      badge: "Link unavailable",
+      status: "danger" as const,
+      title:
+        mode === "verify"
+          ? "This verification link is incomplete."
+          : "This reset link is incomplete.",
+      description:
+        mode === "verify"
+          ? "Open the complete link from your email, or request a fresh verification link."
+          : "Open the complete link from your email, or request a new password reset link.",
+      actionHref,
+      actionLabel,
+    };
+  }
+
+  switch (code) {
+    case "TOKEN_EXPIRED":
+      return {
+        badge: "Link expired",
+        status: "warning" as const,
+        title: "This link has expired.",
+        description: "Request a fresh link and use it before it expires.",
+        actionHref,
+        actionLabel,
+      };
+    case "TOKEN_ALREADY_USED":
+      return {
+        badge: "Link already used",
+        status: "warning" as const,
+        title: "This link has already been used.",
+        description: "For your security, one-time links cannot be used again.",
+        actionHref,
+        actionLabel,
+      };
+    case "TOKEN_SUPERSEDED":
+      return {
+        badge: "Link replaced",
+        status: "warning" as const,
+        title: "This link was replaced.",
+        description: "A newer link is available. Request another one if needed.",
+        actionHref,
+        actionLabel,
+      };
+    default:
+      return {
+        badge: "Link unavailable",
+        status: "danger" as const,
+        title: "This link is not valid.",
+        description: "Request a fresh link and try again.",
+        actionHref,
+        actionLabel,
+      };
+  }
+}
+
+export function TokenState({
+  mode,
+  code,
+  missing = false,
+}: {
+  mode: "verify" | "reset";
+  code?: TokenErrorCode;
+  missing?: boolean;
+}) {
+  const state = tokenStateCopy(mode, code, missing);
+  const titleId = `${mode}-token-title`;
+
+  return (
+    <section className="auth-card auth-card--state" aria-labelledby={titleId}>
+      <div className="auth-state">
+        <StatusBadge status={state.status}>{state.badge}</StatusBadge>
+        <p className="eyebrow">{mode === "verify" ? "Email verification" : "Password reset"}</p>
+        <h1 id={titleId}>{state.title}</h1>
+        <p className="auth-intro">{state.description}</p>
+        <div className="auth-state__actions">
+          <Link className="ui-button ui-button--primary" href={state.actionHref}>
+            {state.actionLabel}
+          </Link>
+          <Link className="ui-button ui-button--secondary" href="/login">
+            Return to sign in
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function CompletionState({ mode, message }: { mode: "verify" | "reset"; message: string }) {
+  const titleId = `${mode}-success-title`;
+
+  return (
+    <section className="auth-card auth-card--state" aria-labelledby={titleId}>
+      <div className="auth-state">
+        <StatusBadge status="success">Complete</StatusBadge>
+        <p className="eyebrow">{mode === "verify" ? "Email verification" : "Password reset"}</p>
+        <h1 id={titleId}>{mode === "verify" ? "Email verified" : "Password reset"}</h1>
+        <p className="auth-intro">{message}</p>
+        <div className="auth-state__actions">
+          <Link className="ui-button ui-button--primary" href="/login">
+            Sign in
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 export function AuthForm({ mode, token }: AuthFormProps) {
@@ -101,22 +271,28 @@ export function AuthForm({ mode, token }: AuthFormProps) {
   const [pending, setPending] = useState(mode === "verify" && Boolean(token));
   const [success, setSuccess] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
+  const [errorCode, setErrorCode] = useState<string | undefined>(
+    (mode === "verify" || mode === "reset") && !token ? "TOKEN_INVALID" : undefined,
+  );
   const [error, setError] = useState<string | undefined>(
-    mode === "verify" && !token
-      ? "This verification link is missing its one-time token."
+    (mode === "verify" || mode === "reset") && !token
+      ? authErrorMessage("TOKEN_INVALID")
       : undefined,
   );
   const verificationStarted = useRef(false);
-
   const isVerify = mode === "verify";
-  const isPasswordForm = mode === "signup" || mode === "login" || mode === "reset";
-  const content = mode === "verify" || mode === "resend" ? undefined : copy[mode];
+  const isTokenMode = mode === "verify" || mode === "reset";
+  const content =
+    isTokenMode && mode !== "reset" ? undefined : mode === "resend" ? undefined : copy[mode];
 
   const submit = useCallback(
-    async (event?: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    async (event?: FormEvent<HTMLFormElement>): Promise<void> => {
       event?.preventDefault();
+      if ((mode === "verify" || mode === "reset") && !token) return;
+
       setPending(true);
       setError(undefined);
+      setErrorCode(undefined);
       setSuccess(undefined);
       setFieldErrors({});
 
@@ -172,25 +348,37 @@ export function AuthForm({ mode, token }: AuthFormProps) {
               ? validateAuthFields(mode, { email, password, confirmation })
               : {};
           setFieldErrors(apiFieldErrors);
+          setErrorCode(
+            Object.keys(apiFieldErrors).length > 0
+              ? undefined
+              : (payload.error?.code ?? "UNKNOWN_ERROR"),
+          );
           setError(
             Object.keys(apiFieldErrors).length > 0
               ? undefined
-              : errorMessage(payload.error?.code, "We could not complete that request. Try again."),
+              : authErrorMessage(payload.error?.code),
           );
           return;
         }
 
-        setSuccess(payload.message ?? "Request complete.");
+        const message = payload.message ?? "Request complete.";
+        setErrorCode(undefined);
+        setSuccess(message);
         if (mode === "verify" && window.history.replaceState) {
           window.history.replaceState({}, "", "/verify-email");
         }
-        if (mode === "reset" && window.history.replaceState) {
-          window.history.replaceState({}, "", "/reset-password");
+        if (mode === "reset") {
+          setPassword("");
+          setConfirmation("");
+          if (window.history.replaceState) {
+            window.history.replaceState({}, "", "/reset-password");
+          }
         }
         if (mode === "login") {
           router.push("/account");
         }
       } catch {
+        setErrorCode("NETWORK_ERROR");
         setError("We could not reach Taskfella. Check your connection and try again.");
       } finally {
         setPending(false);
@@ -200,26 +388,70 @@ export function AuthForm({ mode, token }: AuthFormProps) {
   );
 
   useEffect(() => {
+    const firstInvalidField = (["email", "password", "confirmation"] as const).find(
+      (field) => fieldErrors[field],
+    );
+    if (!firstInvalidField) return;
+    document.getElementById(`${mode}-${firstInvalidField}`)?.focus();
+  }, [fieldErrors, mode]);
+
+  useEffect(() => {
     if (!isVerify || !token || verificationStarted.current) return;
     verificationStarted.current = true;
     void submit();
   }, [isVerify, submit, token]);
 
+  const tokenMissing = isTokenMode && !token;
+  if (isVerify && success) {
+    return <CompletionState mode="verify" message={success} />;
+  }
+  if (isVerify && (tokenMissing || isTokenErrorCode(errorCode))) {
+    return (
+      <TokenState
+        mode="verify"
+        code={errorCode as TokenErrorCode | undefined}
+        missing={tokenMissing}
+      />
+    );
+  }
   if (isVerify) {
     return (
-      <section className="auth-card" aria-labelledby="verify-title">
-        <p className="eyebrow">Email verification</p>
-        <h1 id="verify-title">Confirm your email address</h1>
-        <p className="auth-intro">We are checking your one-time verification link.</p>
-        <div className="auth-feedback" aria-live="polite" role={error ? "alert" : "status"}>
-          {pending && <p>Pending…</p>}
-          {success && <p className="feedback-success">{success}</p>}
-          {error && <p className="feedback-error">{error}</p>}
+      <section
+        className="auth-card auth-card--state"
+        aria-labelledby="verify-title"
+        aria-busy={pending}
+      >
+        <div className="auth-state">
+          <StatusBadge status={error ? "danger" : "neutral"}>
+            {error ? "Needs attention" : "Checking"}
+          </StatusBadge>
+          <p className="eyebrow">Email verification</p>
+          <h1 id="verify-title">Confirm your email address</h1>
+          <p className="auth-intro">We are checking your one-time verification link.</p>
+          <AuthFeedback
+            pending={pending}
+            success={success}
+            error={error}
+            pendingMessage="Checking your verification link…"
+          />
+          <p className="auth-links">
+            Need another link? <Link href="/verify-email/resend">Request verification again</Link>
+          </p>
         </div>
-        <p className="auth-links">
-          <Link href="/login">Go to sign in</Link>
-        </p>
       </section>
+    );
+  }
+
+  if (mode === "reset" && success) {
+    return <CompletionState mode="reset" message={success} />;
+  }
+  if (mode === "reset" && (tokenMissing || isTokenErrorCode(errorCode))) {
+    return (
+      <TokenState
+        mode="reset"
+        code={errorCode as TokenErrorCode | undefined}
+        missing={tokenMissing}
+      />
     );
   }
 
@@ -230,22 +462,32 @@ export function AuthForm({ mode, token }: AuthFormProps) {
       : content?.intro;
   const hasFieldErrors = Object.keys(fieldErrors).length > 0;
   const validationSummaryId = `${mode}-validation-summary`;
+  const emailInputId = `${mode}-email`;
   const emailHelpId = `${mode}-email-help`;
   const emailErrorId = `${mode}-email-error`;
+  const passwordInputId = `${mode}-password`;
   const passwordHelpId = `${mode}-password-help`;
   const passwordErrorId = `${mode}-password-error`;
+  const confirmationInputId = `${mode}-confirmation`;
   const confirmationHelpId = `${mode}-confirmation-help`;
   const confirmationErrorId = `${mode}-confirmation-error`;
+  const isPasswordForm = mode === "signup" || mode === "login" || mode === "reset";
 
   return (
-    <section className="auth-card" aria-labelledby={`${mode}-title`}>
+    <section className="auth-card" aria-labelledby={`${mode}-title`} aria-busy={pending}>
       <p className="eyebrow">Taskfella account</p>
       <h1 id={`${mode}-title`}>{title}</h1>
       <p className="auth-intro">{intro}</p>
       {hasFieldErrors && (
-        <p id={validationSummaryId} className="feedback-error" role="alert">
-          Please correct the highlighted fields and try again.
-        </p>
+        <div
+          id={validationSummaryId}
+          className="auth-validation-summary"
+          role="alert"
+          tabIndex={-1}
+        >
+          <strong>Check the highlighted fields.</strong>
+          <p>Correct the information below and try again.</p>
+        </div>
       )}
       <form
         className="auth-form"
@@ -254,9 +496,13 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         aria-describedby={hasFieldErrors ? validationSummaryId : undefined}
       >
         {(mode === "signup" || mode === "login" || mode === "forgot" || mode === "resend") && (
-          <label className="field">
-            <span>Email address</span>
+          <div className="auth-field">
+            <label className="field-label" htmlFor={emailInputId}>
+              Email address
+            </label>
             <input
+              className="auth-input"
+              id={emailInputId}
               type="email"
               name="email"
               value={email}
@@ -268,20 +514,27 @@ export function AuthForm({ mode, token }: AuthFormProps) {
               aria-describedby={[emailHelpId, fieldErrors.email ? emailErrorId : undefined]
                 .filter(Boolean)
                 .join(" ")}
+              aria-errormessage={fieldErrors.email ? emailErrorId : undefined}
             />
-            <small id={emailHelpId}>Use the address associated with your account.</small>
+            <small id={emailHelpId} className="field-help">
+              Use the address associated with your account.
+            </small>
             {fieldErrors.email && (
               <small id={emailErrorId} className="field-error">
                 {fieldErrors.email}
               </small>
             )}
-          </label>
+          </div>
         )}
 
         {isPasswordForm && (
-          <label className="field">
-            <span>{mode === "reset" ? "New password" : "Password"}</span>
+          <div className="auth-field">
+            <label className="field-label" htmlFor={passwordInputId}>
+              {mode === "reset" ? "New password" : "Password"}
+            </label>
             <input
+              className="auth-input"
+              id={passwordInputId}
               type="password"
               name="password"
               value={password}
@@ -300,8 +553,9 @@ export function AuthForm({ mode, token }: AuthFormProps) {
               aria-describedby={[passwordHelpId, fieldErrors.password ? passwordErrorId : undefined]
                 .filter(Boolean)
                 .join(" ")}
+              aria-errormessage={fieldErrors.password ? passwordErrorId : undefined}
             />
-            <small id={passwordHelpId}>
+            <small id={passwordHelpId} className="field-help">
               Use at least 12 characters. Spaces and passphrases are welcome.
             </small>
             {fieldErrors.password && (
@@ -309,13 +563,17 @@ export function AuthForm({ mode, token }: AuthFormProps) {
                 {fieldErrors.password}
               </small>
             )}
-          </label>
+          </div>
         )}
 
         {mode === "reset" && (
-          <label className="field">
-            <span>Repeat new password</span>
+          <div className="auth-field">
+            <label className="field-label" htmlFor={confirmationInputId}>
+              Repeat new password
+            </label>
             <input
+              className="auth-input"
+              id={confirmationInputId}
               type="password"
               name="password-confirmation"
               value={confirmation}
@@ -331,18 +589,21 @@ export function AuthForm({ mode, token }: AuthFormProps) {
               ]
                 .filter(Boolean)
                 .join(" ")}
+              aria-errormessage={fieldErrors.confirmation ? confirmationErrorId : undefined}
             />
-            <small id={confirmationHelpId}>Repeat the new password exactly.</small>
+            <small id={confirmationHelpId} className="field-help">
+              Repeat the new password exactly.
+            </small>
             {fieldErrors.confirmation && (
               <small id={confirmationErrorId} className="field-error">
                 {fieldErrors.confirmation}
               </small>
             )}
-          </label>
+          </div>
         )}
 
         <button
-          className="primary-action button-action auth-submit"
+          className="ui-button ui-button--primary auth-submit"
           type="submit"
           disabled={pending}
         >
@@ -359,11 +620,8 @@ export function AuthForm({ mode, token }: AuthFormProps) {
                     : "Send fresh link"}
         </button>
       </form>
-      <div className="auth-feedback" aria-live="polite" role={error ? "alert" : "status"}>
-        {success && <p className="feedback-success">{success}</p>}
-        {error && <p className="feedback-error">{error}</p>}
-      </div>
-      <p className="auth-links">
+      <AuthFeedback pending={pending} success={success} error={error} />
+      <div className="auth-links">
         {mode === "signup" && (
           <>
             Already have an account? <Link href="/login">Sign in</Link>
@@ -371,7 +629,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         )}
         {mode === "login" && (
           <>
-            <Link href="/forgot-password">Forgot password?</Link> ·{" "}
+            <Link href="/forgot-password">Forgot password?</Link> <span aria-hidden="true">·</span>{" "}
             <Link href="/signup">Create account</Link>
           </>
         )}
@@ -380,9 +638,14 @@ export function AuthForm({ mode, token }: AuthFormProps) {
             Need to verify an address? <Link href="/verify-email/resend">Resend verification</Link>
           </>
         )}
-        {mode === "reset" && <Link href="/login">Return to sign in</Link>}
+        {mode === "reset" && (
+          <>
+            Need another reset link? <Link href="/forgot-password">Request one</Link>{" "}
+            <span aria-hidden="true">·</span> <Link href="/login">Return to sign in</Link>
+          </>
+        )}
         {mode === "resend" && <Link href="/login">Return to sign in</Link>}
-      </p>
+      </div>
     </section>
   );
 }

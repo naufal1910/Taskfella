@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { type ReactNode } from "react";
+import { BrandMark } from "@/components/ui/primitives";
 
 export function AuthPage({ children }: { children: ReactNode }) {
   return (
     <div className="auth-frame">
       <header className="auth-header">
         <Link className="brand" href="/" aria-label="Taskfella home">
-          <span className="brand-mark" aria-hidden="true">
-            T
-          </span>
+          <BrandMark />
           <span>Taskfella</span>
         </Link>
         <nav aria-label="Account navigation">
@@ -20,7 +19,15 @@ export function AuthPage({ children }: { children: ReactNode }) {
           </Link>
         </nav>
       </header>
-      <main className="auth-main">{children}</main>
+      <main className="auth-main">
+        <div className="auth-content">
+          <div className="auth-identity" aria-hidden="true">
+            <BrandMark className="auth-identity__mark" />
+            <span>Private, focused personal work</span>
+          </div>
+          {children}
+        </div>
+      </main>
       <footer className="auth-footer">
         <span>Taskfella</span>
         <span>Private, focused personal work.</span>
