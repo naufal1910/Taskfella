@@ -81,8 +81,6 @@ export async function consumeRateLimit(
   const windowEnd = new Date(now.getTime() + policy.windowMs);
 
   return db.transaction(async (tx) => {
-    await pruneExpiredRateLimits(tx, now);
-
     await tx
       .insert(authRateLimits)
       .values({
@@ -104,7 +102,8 @@ export async function consumeRateLimit(
       throw new Error("Rate-limit state could not be read.");
     }
 
-    if (current.expiresAt.getTime() <= now.getTime()) {
+    const expired = current.expiresAt.getTime() <= now.getTime();
+    if (expired) {
       await tx
         .update(authRateLimits)
         .set({
@@ -114,7 +113,13 @@ export async function consumeRateLimit(
           updatedAt: now,
         })
         .where(eq(authRateLimits.keyHash, keyHash));
+    }
 
+    // Lock and refresh the requested bucket before pruning so concurrent
+    // callers cannot prune the row they are about to consume.
+    await pruneExpiredRateLimits(tx, now);
+
+    if (expired) {
       return {
         allowed: true,
         limit: policy.maxAttempts,
@@ -172,6 +177,7 @@ export async function pruneExpiredRateLimits(
     .from(authRateLimits)
     .where(lte(authRateLimits.expiresAt, now))
     .orderBy(authRateLimits.expiresAt)
+    .for("update", { skipLocked: true })
     .limit(RATE_LIMIT_PRUNE_BATCH_SIZE);
   if (expired.length === 0) {
     return 0;
