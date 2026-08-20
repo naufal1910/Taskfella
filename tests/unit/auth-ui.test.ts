@@ -10,6 +10,7 @@ vi.mock("next/navigation", () => ({
 import { AccountState } from "@/components/auth/account-state";
 import {
   AuthForm,
+  AuthFeedback,
   authErrorMessage,
   CompletionState,
   TokenState,
@@ -52,8 +53,24 @@ describe("authentication lifecycle UI", () => {
 
     expect(html).toContain("Confirm your email address");
     expect(html).toContain("Checking your verification link");
-    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('class="auth-feedback auth-feedback--pending"');
+    expect(html).toContain('role="status"');
     expect(html).not.toContain("secret-token");
+  });
+
+  it("keeps accepted email requests explicitly pending and generic", () => {
+    const html = markup(
+      createElement(AuthFeedback, {
+        pending: false,
+        accepted: "If this address can be registered, we sent a verification link.",
+      }),
+    );
+
+    expect(html).toContain("Request received");
+    expect(html).toContain("If this address can be registered");
+    expect(html).toContain('class="auth-feedback auth-feedback--pending"');
+    expect(html).toContain('role="status"');
+    expect(html).not.toContain("Complete");
   });
 
   it("maps security-sensitive and recoverable failures to safe UI copy", () => {

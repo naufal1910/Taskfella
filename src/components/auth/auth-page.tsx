@@ -10,7 +10,9 @@ export function AuthPage({ children }: { children: ReactNode }) {
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    mainRef.current?.focus();
+    const main = mainRef.current;
+    if (!main || main.contains(document.activeElement)) return;
+    main.focus();
   }, [pathname]);
 
   return (

@@ -114,28 +114,38 @@ export function authErrorMessage(
   }
 }
 
-function AuthFeedback({
+export function AuthFeedback({
   pending,
+  accepted,
   success,
   error,
   pendingMessage = "Working…",
 }: {
   pending: boolean;
+  accepted?: string;
   success?: string;
   error?: string;
   pendingMessage?: string;
 }) {
-  if (!pending && !success && !error) return null;
+  if (!pending && !accepted && !success && !error) return null;
 
-  const tone = pending ? "pending" : error ? "error" : "success";
-  const label = pending ? "In progress" : error ? "Unable to continue" : "Complete";
-  const message = pending ? pendingMessage : (success ?? error);
+  const hasPendingOutcome = pending || Boolean(accepted);
+  const hasError = Boolean(error && !hasPendingOutcome);
+  const tone = hasPendingOutcome ? "pending" : hasError ? "error" : "success";
+  const label = pending
+    ? "In progress"
+    : accepted
+      ? "Request received"
+      : hasError
+        ? "Unable to continue"
+        : "Complete";
+  const message = pending ? pendingMessage : (accepted ?? success ?? error);
 
   return (
     <div
       className={`auth-feedback auth-feedback--${tone}`}
-      role={error ? "alert" : "status"}
-      aria-live={error ? "assertive" : "polite"}
+      role={hasError ? "alert" : "status"}
+      aria-live={hasError ? "assertive" : "polite"}
       aria-atomic="true"
     >
       <strong>{label}</strong>
@@ -296,6 +306,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
   const [confirmation, setConfirmation] = useState("");
   const router = useRouter();
   const [pending, setPending] = useState(mode === "verify" && Boolean(token));
+  const [accepted, setAccepted] = useState<string>();
   const [success, setSuccess] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [errorCode, setErrorCode] = useState<string | undefined>(
@@ -318,6 +329,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
       if ((mode === "verify" || mode === "reset") && !token) return;
 
       setPending(true);
+      setAccepted(undefined);
       setError(undefined);
       setErrorCode(undefined);
       setSuccess(undefined);
@@ -367,6 +379,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         const payload = (await response.json().catch(() => ({}))) as {
           error?: ApiError;
           message?: string;
+          status?: "pending" | "success";
         };
 
         if (!response.ok) {
@@ -389,8 +402,10 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         }
 
         const message = payload.message ?? "Request complete.";
+        const requestAccepted = response.status === 202 && payload.status === "pending";
         setErrorCode(undefined);
-        setSuccess(message);
+        setAccepted(requestAccepted ? message : undefined);
+        setSuccess(requestAccepted ? undefined : message);
         if (mode === "verify" && window.history.replaceState) {
           window.history.replaceState({}, "", "/verify-email");
         }
@@ -446,7 +461,6 @@ export function AuthForm({ mode, token }: AuthFormProps) {
       <section
         className="auth-card auth-card--state"
         aria-labelledby="verify-title"
-        aria-busy={pending}
       >
         <div className="auth-state">
           <StatusBadge status={error ? "danger" : "neutral"}>
@@ -501,7 +515,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
   const isPasswordForm = mode === "signup" || mode === "login" || mode === "reset";
 
   return (
-    <section className="auth-card" aria-labelledby={`${mode}-title`} aria-busy={pending}>
+    <section className="auth-card" aria-labelledby={`${mode}-title`}>
       <p className="eyebrow">Taskfella account</p>
       <h1 id={`${mode}-title`}>{title}</h1>
       <p className="auth-intro">{intro}</p>
@@ -520,6 +534,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         className="auth-form"
         onSubmit={submit}
         noValidate
+        aria-busy={pending || undefined}
         aria-describedby={hasFieldErrors ? validationSummaryId : undefined}
       >
         {(mode === "signup" || mode === "login" || mode === "forgot" || mode === "resend") && (
@@ -647,7 +662,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
                     : "Send fresh link"}
         </button>
       </form>
-      <AuthFeedback pending={pending} success={success} error={error} />
+      <AuthFeedback pending={pending} accepted={accepted} success={success} error={error} />
       <div className="auth-links">
         {mode === "signup" && (
           <>

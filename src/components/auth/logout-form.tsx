@@ -44,7 +44,7 @@ export function LogoutForm() {
   }
 
   return (
-    <section className="auth-card" aria-labelledby="logout-title" aria-busy={pending}>
+    <section className="auth-card" aria-labelledby="logout-title">
       <StatusBadge
         status={
           pending
