@@ -14,11 +14,9 @@ Phase 1B implements the accessible email/password identity lifecycle on the Phas
 
 ## Email delivery
 
-`src/server/modules/auth/email-sender.ts` is the only transactional-email boundary. Non-production environments default to the local sender, which writes minimal plain-text and accessible HTML messages to `.local/mail/`. The directory is ignored by git, files are mode `0600`, filenames contain no address or token, and the message body is available only as a local test artifact. Remove it with `rm -rf .local/mail/` after inspection.
+`src/server/modules/auth/email-sender.ts` is the only transactional-email boundary. It renders minimal plain-text and accessible HTML messages with no unrelated personal content, derives links from `APP_URL`, and states each one-time link's expiration. The [foundation operations guide](../operations.md) owns delivery-mode configuration, local artifact inspection and cleanup, and production SMTP requirements.
 
-Production must set `EMAIL_DELIVERY_MODE=smtp`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM`. SMTP port, TLS mode, and optional paired username/password are documented in `.env.example`; there is no production fallback to local capture. SMTP uses the portable Nodemailer SMTP transport rather than a provider-specific SDK.
-
-Message links are derived from `APP_URL`. The message contains no unrelated personal content and states the one-time expiration time. Raw links are not logged or returned by API responses.
+SMTP uses the portable Nodemailer SMTP transport rather than a provider-specific SDK. Raw links are not logged or returned by API responses.
 
 ## Verification
 

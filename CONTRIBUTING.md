@@ -14,7 +14,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-Do not put real credentials in `.env.example`, source files, tests, commits, or pull requests. `.env` is ignored and local PostgreSQL values are development-only placeholders. Local transactional messages are captured under the ignored `.local/mail/` directory; inspect or remove those artifacts locally, and never use local delivery in production.
+Do not put real credentials in `.env.example`, source files, tests, commits, or pull requests. `.env` is ignored and local PostgreSQL values are development-only placeholders. See the [foundation operations guide](docs/operations.md) for local transactional-message capture and production delivery guidance.
 
 ## Visual foundation
 
@@ -45,7 +45,7 @@ Database integration tests need a reachable, migrated PostgreSQL instance. Keep 
 
 - `src/app/` contains the Next.js App Router UI and route handlers.
 - `src/server/` contains configuration, HTTP foundations, observability, database access, and domain-ready server modules.
-- `drizzle/` contains ordered migrations; the latest Phase 1A migration is part of readiness.
+- `drizzle/` contains ordered migrations; the latest required migration is part of readiness.
 - `compose.yaml` is only for local PostgreSQL development.
 - `docs/implementation/taskfella-analysis.md` is the authoritative phased implementation plan.
 

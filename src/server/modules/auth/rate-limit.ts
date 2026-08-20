@@ -157,7 +157,7 @@ export async function consumeRateLimit(
   });
 }
 
-/** Remove expired buckets in a maintenance call without touching live limits. */
+/** Remove a bounded batch of expired buckets without touching live limits. */
 export async function pruneExpiredRateLimits(
   db: RateLimitDatabase,
   now = new Date(),

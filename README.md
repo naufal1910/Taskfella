@@ -44,11 +44,7 @@ A migrated, reachable database returns HTTP `200` with `status: "ok"`. An unavai
 | `pnpm start`                     | Serve the production build                                       |
 | `pnpm db:stop`                   | Stop local PostgreSQL                                            |
 
-The full local quality pass is `pnpm validate`. Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. Phase 1A/1B use database-backed opaque random tokens and need no deployment-wide session secret.
-
-In local or test environments, email verification and password-reset messages are captured as JSON files under `.local/mail/` (ignored by git). Inspect the latest message with `ls -lt .local/mail/` and remove the directory with `rm -rf .local/mail/` when finished. Local capture is selected explicitly by `EMAIL_DELIVERY_MODE=local`; production configuration is rejected unless `EMAIL_DELIVERY_MODE=smtp` and an SMTP host and sender are supplied. Set the documented SMTP placeholders in the deployment environment, never in a commit.
-
-Production authentication rate limits require `AUTH_TRUSTED_PROXY=true` behind an edge that strips and sets `X-Real-IP` or `X-Forwarded-For`; direct local development keeps it false and rejects forwarding headers.
+The full local quality pass is `pnpm validate`. Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. See the [foundation operations guide](docs/operations.md) for authentication delivery, local message artifacts, trusted-proxy rate limits, and production SMTP configuration.
 
 ## Production container
 

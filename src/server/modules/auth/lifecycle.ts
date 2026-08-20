@@ -194,7 +194,10 @@ export async function authenticateAndIssueSession(
           .where(eq(passwordCredentials.accountId, account.id))
           .limit(1)
       : [];
-    const validPassword = await verifyPasswordWithFallback(input.password, credential?.passwordHash);
+    const validPassword = await verifyPasswordWithFallback(
+      input.password,
+      credential?.passwordHash,
+    );
 
     if (!account || !validPassword) {
       return { state: "invalid-credentials" };

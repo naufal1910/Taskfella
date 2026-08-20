@@ -116,7 +116,7 @@ export async function setPasswordCredential(
   return credential;
 }
 
-/** Verify against the stored Argon2id material without returning it to callers. */
+/** Verify against stored Argon2id material or a process-local fallback without returning it. */
 export async function verifyAccountPassword(
   db: Database,
   accountId: string,

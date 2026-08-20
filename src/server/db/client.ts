@@ -47,7 +47,7 @@ export function getSql(): Sql {
 
 /**
  * Readiness requires a live PostgreSQL connection and the applied latest
- * foundation migration. A ledger table without that row is not ready.
+ * required migration. A ledger without that row is not ready.
  */
 export async function checkDatabaseReadiness(): Promise<boolean> {
   const result = await getSql()<{ migrations_ready: boolean }[]>`
