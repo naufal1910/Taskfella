@@ -124,9 +124,10 @@ export function AccountState() {
     return (
       <section
         className="auth-card auth-card--state"
+        role="status"
         aria-labelledby="account-loading-title"
-        aria-busy="true"
         aria-live="polite"
+        aria-atomic="true"
       >
         <div className="auth-state">
           <StatusBadge status="neutral">Loading</StatusBadge>

@@ -106,7 +106,9 @@ describe("authentication lifecycle UI", () => {
     const page = markup(createElement(AuthPage, null, createElement("p", null, "Content")));
 
     expect(account).toContain("Loading your account");
-    expect(account).toContain('aria-busy="true"');
+    expect(account).toContain('role="status"');
+    expect(account).toContain('aria-live="polite"');
+    expect(account).not.toContain('aria-busy="true"');
     expect(logout).toContain("Sign out of Taskfella");
     expect(logout).toContain('class="ui-button ui-button--primary auth-submit"');
     expect(page).toContain('class="auth-identity"');
