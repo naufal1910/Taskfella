@@ -479,10 +479,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
   }
   if (isVerify) {
     return (
-      <section
-        className="auth-card auth-card--state"
-        aria-labelledby="verify-title"
-      >
+      <section className="auth-card auth-card--state" aria-labelledby="verify-title">
         <div className="auth-state">
           <StatusBadge status={error ? "danger" : "neutral"}>
             {error ? "Needs attention" : "Checking"}

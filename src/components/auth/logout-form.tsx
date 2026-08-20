@@ -47,13 +47,7 @@ export function LogoutForm() {
     <section className="auth-card" aria-labelledby="logout-title">
       <StatusBadge
         status={
-          pending
-            ? "neutral"
-            : messageTone === "error"
-              ? "danger"
-              : message
-                ? "success"
-                : "neutral"
+          pending ? "neutral" : messageTone === "error" ? "danger" : message ? "success" : "neutral"
         }
       >
         {pending
