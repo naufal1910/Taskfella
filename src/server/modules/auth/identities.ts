@@ -58,6 +58,31 @@ async function findAccount(
   return account ?? null;
 }
 
+async function readAccount(
+  tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  accountId: string,
+): Promise<Account | null> {
+  const [account] = await tx.select().from(accounts).where(eq(accounts.id, accountId));
+  return account ?? null;
+}
+
+async function lockAccountsInOrder(
+  tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  accountIds: Array<string | undefined>,
+): Promise<Account[]> {
+  const orderedIds = Array.from(
+    new Set(accountIds.filter((accountId): accountId is string => Boolean(accountId))),
+  ).sort();
+  const lockedAccounts: Account[] = [];
+  for (const accountId of orderedIds) {
+    const account = await findAccount(tx, accountId);
+    if (account) {
+      lockedAccounts.push(account);
+    }
+  }
+  return lockedAccounts;
+}
+
 async function rotateBoundSession(
   tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
   account: Account,
@@ -137,10 +162,26 @@ export async function completeGoogleIdentity(
       }
 
       const existingIdentity = await findIdentity(tx, provider, subject);
-      const account = await findAccount(tx, input.transaction.accountId);
+      const accountCandidate = await readAccount(tx, input.transaction.accountId);
+      if (!accountCandidate) {
+        return { state: "session-invalid" };
+      }
+
+      const [emailOwnerCandidate] = await tx
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(eq(accounts.normalizedEmail, normalizedEmail));
+      const lockedAccounts = await lockAccountsInOrder(tx, [
+        accountCandidate.id,
+        emailOwnerCandidate?.id,
+      ]);
+      const account = lockedAccounts.find(({ id }) => id === accountCandidate.id);
       if (!account) {
         return { state: "session-invalid" };
       }
+      const emailOwner = emailOwnerCandidate
+        ? lockedAccounts.find(({ id }) => id === emailOwnerCandidate.id)
+        : undefined;
 
       if (existingIdentity && existingIdentity.accountId !== account.id) {
         return { state: "identity-conflict" };
@@ -173,11 +214,6 @@ export async function completeGoogleIdentity(
           : { state: "session-invalid" };
       }
 
-      const [emailOwner] = await tx
-        .select({ id: accounts.id })
-        .from(accounts)
-        .where(eq(accounts.normalizedEmail, normalizedEmail))
-        .for("update");
       if (emailOwner && emailOwner.id !== account.id) {
         return { state: "email-conflict" };
       }

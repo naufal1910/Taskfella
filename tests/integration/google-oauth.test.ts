@@ -300,6 +300,40 @@ integration("Google OAuth and explicit identity linking", () => {
     expect(JSON.stringify(payload)).not.toContain(profile.subject);
   });
 
+  it("serializes reciprocal email-conflict links without deadlocking", async () => {
+    if (!db) return;
+    const first = await accountWithPassword(uniqueEmail("reciprocal-first"));
+    const second = await accountWithPassword(uniqueEmail("reciprocal-second"));
+    const firstProfile = {
+      subject: `google-subject-${crypto.randomUUID()}`,
+      email: second.email,
+    };
+    const secondProfile = {
+      subject: `google-subject-${crypto.randomUUID()}`,
+      email: first.email,
+    };
+    const firstCeremony = await begin("link", firstProfile, first.session);
+    const secondCeremony = await begin("link", secondProfile, second.session);
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      handleGoogleCallback(
+        callbackRequest(firstCeremony.state, firstCeremony.verifier, { session: first.session }),
+        { db, environment, provider: firstCeremony.provider },
+      ),
+      handleGoogleCallback(
+        callbackRequest(secondCeremony.state, secondCeremony.verifier, {
+          session: second.session,
+        }),
+        { db, environment, provider: secondCeremony.provider },
+      ),
+    ]);
+
+    expect(firstResponse.headers.get("location")).toContain("/account?oauth=email-conflict");
+    expect(secondResponse.headers.get("location")).toContain("/account?oauth=email-conflict");
+    expect(await lookupSession(db, first.session)).toMatchObject({ accountId: first.id });
+    expect(await lookupSession(db, second.session)).toMatchObject({ accountId: second.id });
+  });
+
   it("rolls back a new identity when the bound linking session is no longer valid", async () => {
     if (!db) return;
     const email = uniqueEmail("expired-link");
