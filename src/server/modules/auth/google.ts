@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { AppError } from "@/server/http/errors";
-import { type AppEnv, getEnvironment } from "@/server/config/env";
+import { getEnvironment, isGoogleOAuthPlaceholder, type AppEnv } from "@/server/config/env";
 import { validateEmail } from "./accounts";
 
 export const GOOGLE_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -40,10 +40,6 @@ function validGoogleClientSecret(value: string | undefined): value is string {
   return Boolean(value && value.length <= 512 && !/[\s\u0000-\u001f\u007f]/.test(value));
 }
 
-function isPlaceholder(value: string): boolean {
-  return value.startsWith("replace-with-");
-}
-
 /**
  * Local development may intentionally omit Google credentials, but a partial
  * or malformed pair is never treated as disabled configuration.
@@ -60,8 +56,8 @@ export function getGoogleOAuthConfig(
     !validGoogleClientId(environment.GOOGLE_CLIENT_ID) ||
     !validGoogleClientSecret(environment.GOOGLE_CLIENT_SECRET) ||
     (environment.NODE_ENV === "production" &&
-      (isPlaceholder(environment.GOOGLE_CLIENT_ID) ||
-        isPlaceholder(environment.GOOGLE_CLIENT_SECRET)))
+      (isGoogleOAuthPlaceholder(environment.GOOGLE_CLIENT_ID) ||
+        isGoogleOAuthPlaceholder(environment.GOOGLE_CLIENT_SECRET)))
   ) {
     throw new AppError("OAUTH_NOT_CONFIGURED");
   }

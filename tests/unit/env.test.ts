@@ -86,17 +86,35 @@ describe("environment validation", () => {
         EMAIL_SMTP_HOST: "smtp.example",
         EMAIL_FROM: "Taskfella <no-reply@example>",
         EMAIL_SMTP_SECURE: "true",
-        GOOGLE_CLIENT_ID: "local-placeholder.apps.googleusercontent.com",
-        GOOGLE_CLIENT_SECRET: "local-google-placeholder-secret",
+        GOOGLE_CLIENT_ID: "1234567890-abcXYZ.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "GOCSPX-9aB7cD2eF4gH6jK8mN0pQ",
       }),
     ).toMatchObject({
       EMAIL_DELIVERY_MODE: "smtp",
       EMAIL_SMTP_HOST: "smtp.example",
       EMAIL_SMTP_SECURE: true,
       AUTH_TRUSTED_PROXY: true,
+      GOOGLE_CLIENT_ID: "1234567890-abcXYZ.apps.googleusercontent.com",
+      GOOGLE_CLIENT_SECRET: "GOCSPX-9aB7cD2eF4gH6jK8mN0pQ",
+    });
+  });
+
+  it("rejects obvious Google placeholders in production but accepts them locally", () => {
+    const base = {
+      DATABASE_URL: "postgresql://taskfella:taskfella@localhost:5432/taskfella",
+      APP_URL: "https://taskfella.example",
+      AUTH_TRUSTED_PROXY: "true",
+      EMAIL_DELIVERY_MODE: "smtp" as const,
+      EMAIL_SMTP_HOST: "smtp.example",
+      EMAIL_FROM: "Taskfella <no-reply@example>",
       GOOGLE_CLIENT_ID: "local-placeholder.apps.googleusercontent.com",
       GOOGLE_CLIENT_SECRET: "local-google-placeholder-secret",
-    });
+    };
+
+    expect(() => parseEnvironment({ ...base, NODE_ENV: "production" })).toThrow(/GOOGLE/);
+    expect(() =>
+      parseEnvironment({ ...base, NODE_ENV: "development", APP_URL: "http://localhost:3000" }),
+    ).not.toThrow();
   });
 
   it("rejects partial or malformed Google configuration", () => {

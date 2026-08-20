@@ -133,8 +133,8 @@ const environmentSchema = z
       });
     }
     if (
-      value.GOOGLE_CLIENT_ID?.startsWith("replace-with-") ||
-      value.GOOGLE_CLIENT_SECRET?.startsWith("replace-with-")
+      isGoogleOAuthPlaceholder(value.GOOGLE_CLIENT_ID) ||
+      isGoogleOAuthPlaceholder(value.GOOGLE_CLIENT_SECRET)
     ) {
       context.addIssue({
         code: "custom",
@@ -143,6 +143,15 @@ const environmentSchema = z
       });
     }
   });
+
+export function isGoogleOAuthPlaceholder(value: string | undefined): boolean {
+  return Boolean(
+    value &&
+    /(?:replace-with-|placeholder|local-google|(?:^|[-_.])(example|dummy|fake|sample|changeme|test)(?:$|[-_.]))/i.test(
+      value,
+    ),
+  );
+}
 
 type ParsedEnvironment = z.infer<typeof environmentSchema>;
 
