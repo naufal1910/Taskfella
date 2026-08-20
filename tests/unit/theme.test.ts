@@ -69,11 +69,15 @@ describe("appearance resolution", () => {
     Object.defineProperty(globalThis, "window", { configurable: true, value: testWindow });
 
     try {
-      notifyAppearanceChange("dark", "42");
+      notifyAppearanceChange("dark", "42", {
+        authenticated: true,
+        identity: "account-a",
+      });
       expect(received).toEqual({
         preference: "dark",
         revision: "42",
-        authenticated: false,
+        authenticated: true,
+        identity: "account-a",
         reset: false,
       });
     } finally {

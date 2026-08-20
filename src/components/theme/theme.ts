@@ -36,6 +36,7 @@ export function notifyAppearanceChange(
           preference,
           revision,
           authenticated: options.authenticated === true,
+          identity: options.identity,
           reset: options.reset === true,
         },
       }),
