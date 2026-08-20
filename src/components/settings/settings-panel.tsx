@@ -8,6 +8,7 @@ import {
   notifyAppearanceChange,
   type AppearancePreference,
 } from "@/components/theme/theme";
+import { isValidTimezone } from "@/shared/timezone";
 
 const POMODORO_LIMITS = {
   focusDurationMinutes: { min: 1, max: 120 },
@@ -184,16 +185,6 @@ function errorText(error: unknown): string {
   return "We could not save these settings. Nothing was changed. Try again.";
 }
 
-function validTimezone(value: string): boolean {
-  if (value.length === 0 || value.length > 128 || value.trim() !== value) return false;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function numberError(
   value: string,
   limits: { min: number; max: number },
@@ -267,7 +258,7 @@ export function SettingsPanel() {
         setAccount(payload.account);
         setValues(valuesFromAccount(payload.account));
         appliedAppearanceRef.current = payload.account.appearance ?? "system";
-        notifyAppearanceChange();
+        notifyAppearanceChange(appliedAppearanceRef.current);
       })
       .catch(() => {
         if (active) setError("We could not load your settings. Try again.");
@@ -339,8 +330,9 @@ export function SettingsPanel() {
         if (appearanceMutationId === appearanceMutationRef.current) {
           appliedAppearanceRef.current = preference;
         }
-        cacheAppearancePreference(appliedAppearanceRef.current ?? preference);
-        notifyAppearanceChange();
+        const appliedPreference = appliedAppearanceRef.current ?? preference;
+        cacheAppearancePreference(appliedPreference);
+        notifyAppearanceChange(appliedPreference);
       }
     } catch (caught) {
       setError(
@@ -502,7 +494,7 @@ export function SettingsPanel() {
           className="settings-form"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!validTimezone(values.timezone)) {
+            if (!isValidTimezone(values.timezone)) {
               setFieldErrors((current) => ({
                 ...current,
                 timezone: "Enter a valid IANA timezone identifier.",

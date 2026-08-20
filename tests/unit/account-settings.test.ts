@@ -23,6 +23,7 @@ describe("account settings validation", () => {
   it("uses safe defaults and accepts named IANA timezones", () => {
     expect(settingsFromAccountInput({})).toEqual(DEFAULT_ACCOUNT_SETTINGS);
     expect(isValidTimezone("America/New_York")).toBe(true);
+    expect(isValidTimezone("Europe/Kyiv")).toBe(true);
     expect(isValidTimezone("not/a-real-timezone")).toBe(false);
     expect(isValidTimezone("+05:30")).toBe(false);
     expect(isValidTimezone("UTC")).toBe(true);

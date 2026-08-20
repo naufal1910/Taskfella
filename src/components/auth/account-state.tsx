@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
-import { notifyAppearanceChange } from "@/components/theme/theme";
+import { notifyAppearanceChange, type AppearancePreference } from "@/components/theme/theme";
 import { PendingFeedback } from "./pending-feedback";
 
 interface AccountIdentity {
@@ -19,6 +19,7 @@ interface AccountPayload {
   createdAt: string;
   status: "verified" | "unverified";
   identities: AccountIdentity[];
+  appearance?: AppearancePreference;
 }
 
 function csrfCookie(): string | undefined {
@@ -61,7 +62,7 @@ function LogoutControl() {
       });
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
-      notifyAppearanceChange();
+      notifyAppearanceChange("system");
       setMessage("You are signed out.");
       router.push("/login");
     } catch {
@@ -186,7 +187,7 @@ export function AccountState() {
         const payload = (await response.json()) as { account?: AccountPayload };
         if (!payload.account) throw new Error("account");
         setAccount(payload.account);
-        notifyAppearanceChange();
+        notifyAppearanceChange(payload.account.appearance ?? "system");
       })
       .catch(() => {
         if (active) setError(true);

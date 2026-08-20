@@ -11,7 +11,11 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
-import { detectBrowserTimezone, notifyAppearanceChange } from "@/components/theme/theme";
+import {
+  detectBrowserTimezone,
+  notifyAppearanceChange,
+  type AppearancePreference,
+} from "@/components/theme/theme";
 import {
   type AuthFieldErrors,
   type AuthFormMode,
@@ -443,6 +447,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           error?: ApiError;
           message?: string;
           status?: "pending" | "success";
+          account?: { appearance?: AppearancePreference };
         };
 
         if (!response.ok) {
@@ -485,7 +490,9 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           }
         }
         if (mode === "login" || mode === "reset") {
-          notifyAppearanceChange();
+          notifyAppearanceChange(
+            mode === "login" ? (payload.account?.appearance ?? "system") : "system",
+          );
         }
         if (mode === "login") {
           router.push("/account");

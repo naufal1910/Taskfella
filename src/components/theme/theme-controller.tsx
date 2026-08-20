@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import {
   APPEARANCE_CHANGE_EVENT,
   applyAppearance,
+  isAppearancePreference,
   readAppearanceCookie,
   type AppearancePreference,
 } from "./theme";
@@ -16,20 +17,26 @@ interface ThemeControllerProps {
 export function ThemeController({ initialPreference, serverOwnsPreference }: ThemeControllerProps) {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const update = () => {
-      const preference = readAppearanceCookie();
+    let authoritativePreference = serverOwnsPreference ? initialPreference : undefined;
+    const applyCurrent = () => {
+      const preference = authoritativePreference ?? readAppearanceCookie();
       applyAppearance(preference, media.matches);
     };
+    const updateFromAppearanceEvent = (event: Event) => {
+      if (event instanceof CustomEvent && isAppearancePreference(event.detail)) {
+        authoritativePreference = event.detail;
+      } else if (!serverOwnsPreference) {
+        authoritativePreference = readAppearanceCookie();
+      }
+      applyCurrent();
+    };
 
-    applyAppearance(
-      serverOwnsPreference ? initialPreference : readAppearanceCookie(),
-      media.matches,
-    );
-    media.addEventListener("change", update);
-    window.addEventListener(APPEARANCE_CHANGE_EVENT, update);
+    applyCurrent();
+    media.addEventListener("change", applyCurrent);
+    window.addEventListener(APPEARANCE_CHANGE_EVENT, updateFromAppearanceEvent);
     return () => {
-      media.removeEventListener("change", update);
-      window.removeEventListener(APPEARANCE_CHANGE_EVENT, update);
+      media.removeEventListener("change", applyCurrent);
+      window.removeEventListener(APPEARANCE_CHANGE_EVENT, updateFromAppearanceEvent);
     };
   }, [initialPreference, serverOwnsPreference]);
 

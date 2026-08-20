@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { accounts } from "@/server/db/schema";
 import { parseAccountSettingsPatch } from "@/server/modules/account/settings";
@@ -89,19 +89,33 @@ async function update(request: Request): Promise<NextResponse> {
     request,
     async ({ account }) => {
       const patch = parseAccountSettingsPatch(await parseJsonObject(request));
-      const [updated] = await getDatabase()
-        .update(accounts)
-        .set({ ...patch, updatedAt: new Date() })
-        .where(eq(accounts.id, account.id))
-        .returning();
+      const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
+      const database = getDatabase();
+      let updated: typeof accounts.$inferSelect | undefined;
+      if (appearancePatch) {
+        [updated] = await database.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtext(CAST(${account.id} AS text)))`,
+          );
+          return tx
+            .update(accounts)
+            .set({ ...patch, updatedAt: new Date() })
+            .where(eq(accounts.id, account.id))
+            .returning();
+        });
+      } else {
+        [updated] = await database
+          .update(accounts)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(eq(accounts.id, account.id))
+          .returning();
+      }
 
       if (!updated) {
         throw new Error("Account settings could not be saved.");
       }
 
-      return accountResponse(updated, {
-        syncAppearanceCookie: Object.prototype.hasOwnProperty.call(patch, "appearance"),
-      });
+      return accountResponse(updated, { syncAppearanceCookie: appearancePatch });
     },
     { mutation: true },
   );

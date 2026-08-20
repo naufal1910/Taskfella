@@ -35,7 +35,7 @@ export function LogoutForm() {
       });
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
-      notifyAppearanceChange();
+      notifyAppearanceChange("system");
       setMessage("You are signed out. The session cookie was cleared.");
     } catch {
       setMessageTone("error");

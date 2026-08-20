@@ -4,10 +4,15 @@ export const APPEARANCE_CHANGE_EVENT = "taskfella:appearance-change";
 export const APPEARANCE_PREFERENCES = ["system", "light", "dark"] as const;
 export type AppearancePreference = (typeof APPEARANCE_PREFERENCES)[number];
 export type ResolvedAppearance = "light" | "dark";
+export { detectBrowserTimezone } from "@/shared/timezone";
 
-export function notifyAppearanceChange(): void {
+export function notifyAppearanceChange(preference?: AppearancePreference): void {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(APPEARANCE_CHANGE_EVENT));
+    window.dispatchEvent(
+      new CustomEvent(APPEARANCE_CHANGE_EVENT, {
+        detail: preference,
+      }),
+    );
   }
 }
 
@@ -33,8 +38,10 @@ export function resolveAppearance(
   return preference;
 }
 
-export function isAppearancePreference(value: string | undefined): value is AppearancePreference {
-  return value !== undefined && APPEARANCE_PREFERENCES.includes(value as AppearancePreference);
+export function isAppearancePreference(value: unknown): value is AppearancePreference {
+  return (
+    typeof value === "string" && APPEARANCE_PREFERENCES.includes(value as AppearancePreference)
+  );
 }
 
 export function readAppearancePreferenceFromCookie(
@@ -71,13 +78,4 @@ export function readAppearanceCookie(): AppearancePreference {
 export function applyAppearanceFromCookie(): ResolvedAppearance {
   const media = window.matchMedia("(prefers-color-scheme: dark)");
   return applyAppearance(readAppearanceCookie(), media.matches);
-}
-
-export function detectBrowserTimezone(): string | undefined {
-  try {
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return timezone && timezone.length <= 128 ? timezone : undefined;
-  } catch {
-    return undefined;
-  }
 }

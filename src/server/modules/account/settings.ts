@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { AppError } from "@/server/http/errors";
+import { isValidTimezone } from "@/shared/timezone";
+
+export { isValidTimezone };
 
 export const APPEARANCE_VALUES = ["system", "light", "dark"] as const;
 export type Appearance = (typeof APPEARANCE_VALUES)[number];
@@ -28,7 +31,6 @@ export type AccountSettings = typeof DEFAULT_ACCOUNT_SETTINGS;
 export type AccountSettingsPatch = Partial<AccountSettings>;
 
 const controlCharacterPattern = /[\u0000-\u001f\u007f]/;
-const namedIanaTimezones = new Set(Intl.supportedValuesOf("timeZone"));
 const displayNameSchema = z.string().max(80);
 const timezoneSchema = z.string().min(1).max(128);
 const appearanceSchema = z.enum(APPEARANCE_VALUES);
@@ -90,26 +92,6 @@ function chooseValue<T>(values: Array<T | undefined>): T | undefined {
   const first = present[0];
   if (present.some((value) => value !== first)) invalidSettings();
   return first;
-}
-
-export function isValidTimezone(value: string): boolean {
-  if (
-    value.length === 0 ||
-    value.length > 128 ||
-    value.trim() !== value ||
-    controlCharacterPattern.test(value)
-  ) {
-    return false;
-  }
-
-  if (value !== "UTC" && !namedIanaTimezones.has(value)) return false;
-
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export function validateTimezone(value: string): string {

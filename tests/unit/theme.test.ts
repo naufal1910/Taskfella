@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { readAppearancePreferenceFromCookie, resolveAppearance } from "@/components/theme/theme";
+import {
+  APPEARANCE_CHANGE_EVENT,
+  notifyAppearanceChange,
+  readAppearancePreferenceFromCookie,
+  resolveAppearance,
+} from "@/components/theme/theme";
 
 describe("appearance resolution", () => {
   it("uses the system preference only for System", () => {
@@ -13,5 +18,29 @@ describe("appearance resolution", () => {
     expect(readAppearancePreferenceFromCookie(undefined)).toBe("system");
     expect(readAppearancePreferenceFromCookie("sepia")).toBe("system");
     expect(readAppearancePreferenceFromCookie("dark")).toBe("dark");
+  });
+
+  it("publishes the refreshed preference to the mounted controller", () => {
+    const previousWindow = globalThis.window;
+    const testWindow = new EventTarget();
+    let received: unknown;
+    testWindow.addEventListener(APPEARANCE_CHANGE_EVENT, (event) => {
+      received = (event as CustomEvent).detail;
+    });
+    Object.defineProperty(globalThis, "window", { configurable: true, value: testWindow });
+
+    try {
+      notifyAppearanceChange("dark");
+      expect(received).toBe("dark");
+    } finally {
+      if (previousWindow === undefined) {
+        Reflect.deleteProperty(globalThis, "window");
+      } else {
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          value: previousWindow,
+        });
+      }
+    }
   });
 });
