@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
   APPEARANCE_RESET_REVISION,
+  cacheAppearancePreference,
   clearAppearancePreferenceCache,
   notifyAppearanceChange,
   type AppearancePreference,
@@ -196,10 +197,15 @@ export function AccountState() {
         const payload = (await response.json()) as { account?: AccountPayload };
         if (!payload.account) throw new Error("account");
         setAccount(payload.account);
+        cacheAppearancePreference(
+          payload.account.appearance ?? "system",
+          payload.account.appearanceRevision,
+          payload.account.id,
+        );
         notifyAppearanceChange(
           payload.account.appearance ?? "system",
           payload.account.appearanceRevision,
-          { authenticated: true },
+          { authenticated: true, identity: payload.account.id },
         );
       })
       .catch(() => {

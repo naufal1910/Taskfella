@@ -6,7 +6,7 @@ import { noStoreResponse, parseJsonObject } from "@/server/http/auth-route";
 import { protectedRoute } from "@/server/http/authentication";
 import { AppError } from "@/server/http/errors";
 import { parseAccountSettingsPatch } from "@/server/modules/account/settings";
-import { getSessionToken, setAppearanceCookie } from "@/server/modules/auth/cookies";
+import { getSessionToken } from "@/server/modules/auth/cookies";
 import { listAccountOAuthIdentities } from "@/server/modules/auth/identities";
 import { enqueue } from "@/shared/async";
 
@@ -55,6 +55,7 @@ export function accountPayload(
     timezone: account.timezone,
     appearance: account.appearance,
     appearanceRevision,
+    appearanceIdentity: account.id,
     theme: account.appearance,
     notificationsEnabled: account.notificationsEnabled,
     notifications: account.notificationsEnabled,
@@ -88,27 +89,18 @@ export function accountPayload(
 
 async function accountResponse(
   account: typeof accounts.$inferSelect,
-  options: { syncAppearanceCookie?: boolean; appearanceRevision?: string } = {},
+  appearanceRevision?: string,
 ): Promise<NextResponse> {
   const identities = await listAccountOAuthIdentities(getDatabase(), account.id);
-  const response = noStoreResponse({
+  return noStoreResponse({
     ok: true,
-    account: accountPayload(account, identities, options.appearanceRevision),
+    account: accountPayload(account, identities, appearanceRevision),
   });
-  if (options.syncAppearanceCookie !== false) {
-    setAppearanceCookie(
-      response,
-      account.appearance as "system" | "light" | "dark",
-      undefined,
-      options.appearanceRevision,
-    );
-  }
-  return response;
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
   return protectedRoute(request, ({ account, accountVersion }) =>
-    accountResponse(account, { appearanceRevision: accountVersion }),
+    accountResponse(account, accountVersion),
   );
 }
 
@@ -157,11 +149,7 @@ async function update(request: Request): Promise<NextResponse> {
           throw new Error("Account settings could not be saved.");
         }
 
-        return accountResponse(updated, {
-          syncAppearanceCookie: appearancePatch,
-          appearanceRevision,
-        });
-
+        return accountResponse(updated, appearanceRevision);
       },
       { mutation: true },
     );

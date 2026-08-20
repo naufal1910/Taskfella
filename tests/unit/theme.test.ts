@@ -11,7 +11,10 @@ import {
 
 describe("appearance resolution", () => {
   function runBootstrap(
-    initialAppearance: { preference: "system" | "light" | "dark"; authenticated: boolean },
+    initialAppearance: {
+      preference: "system" | "light" | "dark";
+      serverOwnsPreference: boolean;
+    },
     cookie: string,
     systemDark: boolean,
   ): { theme: string; colorScheme: string } {
@@ -26,7 +29,7 @@ describe("appearance resolution", () => {
   it("uses the authenticated server preference before first paint", () => {
     expect(
       runBootstrap(
-        { preference: "dark", authenticated: true },
+        { preference: "dark", serverOwnsPreference: true },
         "taskfella_appearance=light",
         false,
       ),
@@ -35,7 +38,11 @@ describe("appearance resolution", () => {
 
   it("resolves invalid public cache data through the system preference", () => {
     expect(
-      runBootstrap({ preference: "system", authenticated: false }, "taskfella_appearance=%", true),
+      runBootstrap(
+        { preference: "system", serverOwnsPreference: false },
+        "taskfella_appearance=%",
+        true,
+      ),
     ).toEqual({ theme: "dark", colorScheme: "dark" });
   });
 

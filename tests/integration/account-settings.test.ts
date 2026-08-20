@@ -66,7 +66,7 @@ integration("Phase 1D account settings routes", () => {
     );
     expect(initial.status).toBe(200);
     expect(initial.headers.get("cache-control")).toBe("no-store");
-    expect(initial.headers.get("set-cookie")).toContain("taskfella_appearance=system");
+    expect(initial.headers.get("set-cookie")).toBeNull();
     expect(await json(initial)).toMatchObject({
       account: {
         email: owner.email,

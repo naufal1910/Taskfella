@@ -8,7 +8,7 @@ import {
   requireAuthCsrf,
 } from "@/server/http/auth-route";
 import { parseEmailPassword } from "@/server/modules/auth/input";
-import { getAccountVersion } from "@/server/modules/auth/accounts";
+import { getAccountWithVersion } from "@/server/modules/auth/accounts";
 import {
   getSessionToken,
   setAppearanceCookie,
@@ -38,12 +38,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (result.state === "unverified") {
       throw new AppError("EMAIL_NOT_VERIFIED");
     }
-    let appearanceRevision = result.account.updatedAt.toISOString();
-    try {
-      appearanceRevision = (await getAccountVersion(db, result.account.id)) ?? appearanceRevision;
-    } catch {
-      appearanceRevision = result.account.updatedAt.toISOString();
+    const accountSnapshot = await getAccountWithVersion(db, result.account.id);
+    if (!accountSnapshot) {
+      throw new AppError("INTERNAL_ERROR");
     }
+    const appearanceAccount = accountSnapshot.account;
+    const appearanceRevision = accountSnapshot.version;
 
     const response = noStoreResponse(
       {
@@ -52,7 +52,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           id: result.account.id,
           email: result.account.email,
           emailVerifiedAt: result.account.emailVerifiedAt,
-          appearance: result.account.appearance,
+          appearance: appearanceAccount.appearance,
           appearanceRevision,
         },
       },
@@ -62,9 +62,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     setSessionCookie(response, result.token, result.expiresAt, context.environment);
     setAppearanceCookie(
       response,
-      result.account.appearance as "system" | "light" | "dark",
+      appearanceAccount.appearance as "system" | "light" | "dark",
       context.environment,
       appearanceRevision,
+      appearanceAccount.id,
     );
     return response;
   });

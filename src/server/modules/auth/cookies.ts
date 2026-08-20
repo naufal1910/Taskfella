@@ -7,6 +7,7 @@ export const SESSION_COOKIE_NAME = "taskfella_session";
 export const CSRF_COOKIE_NAME = "taskfella_csrf";
 export const APPEARANCE_COOKIE_NAME = "taskfella_appearance";
 export const APPEARANCE_REVISION_COOKIE_NAME = "taskfella_appearance_revision";
+export const APPEARANCE_IDENTITY_COOKIE_NAME = "taskfella_appearance_identity";
 export const CSRF_HEADER_NAME = "x-csrf-token";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 export const CSRF_COOKIE_MAX_AGE_SECONDS = 24 * 60 * 60;
@@ -139,6 +140,7 @@ export function setAppearanceCookie(
   appearance: Appearance,
   environment?: AppEnv,
   revision?: string,
+  identity?: string,
 ): void {
   setCookie(response, APPEARANCE_COOKIE_NAME, appearance, {
     maxAge: APPEARANCE_COOKIE_MAX_AGE_SECONDS,
@@ -147,6 +149,13 @@ export function setAppearanceCookie(
   });
   if (revision) {
     setCookie(response, APPEARANCE_REVISION_COOKIE_NAME, revision, {
+      maxAge: APPEARANCE_COOKIE_MAX_AGE_SECONDS,
+      httpOnly: false,
+      secure: appearanceCookieIsSecure(environment),
+    });
+  }
+  if (identity) {
+    setCookie(response, APPEARANCE_IDENTITY_COOKIE_NAME, identity, {
       maxAge: APPEARANCE_COOKIE_MAX_AGE_SECONDS,
       httpOnly: false,
       secure: appearanceCookieIsSecure(environment),
@@ -161,6 +170,11 @@ export function clearAppearanceCookie(response: NextResponse, environment?: AppE
     secure: appearanceCookieIsSecure(environment),
   });
   setCookie(response, APPEARANCE_REVISION_COOKIE_NAME, "", {
+    maxAge: 0,
+    httpOnly: false,
+    secure: appearanceCookieIsSecure(environment),
+  });
+  setCookie(response, APPEARANCE_IDENTITY_COOKIE_NAME, "", {
     maxAge: 0,
     httpOnly: false,
     secure: appearanceCookieIsSecure(environment),

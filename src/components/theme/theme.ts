@@ -1,5 +1,6 @@
 export const APPEARANCE_COOKIE = "taskfella_appearance";
 export const APPEARANCE_REVISION_COOKIE = "taskfella_appearance_revision";
+export const APPEARANCE_IDENTITY_COOKIE = "taskfella_appearance_identity";
 export const APPEARANCE_RESET_REVISION = "0";
 const APPEARANCE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 export const APPEARANCE_CHANGE_EVENT = "taskfella:appearance-change";
@@ -10,20 +11,23 @@ export { detectBrowserTimezone } from "@/shared/timezone";
 
 let cachedAppearancePreference: AppearancePreference | undefined;
 let cachedAppearanceRevision: string | undefined;
+let cachedAppearanceIdentity: string | undefined;
 
 export function notifyAppearanceChange(
   preference: AppearancePreference,
   revision?: string,
-  options: { authenticated?: boolean; reset?: boolean } = {},
+  options: { authenticated?: boolean; identity?: string; reset?: boolean } = {},
 ): void {
   if (
     revision &&
     (revision === APPEARANCE_RESET_REVISION ||
+      options.identity !== cachedAppearanceIdentity ||
       !cachedAppearanceRevision ||
       compareAppearanceRevisions(revision, cachedAppearanceRevision) >= 0)
   ) {
     cachedAppearancePreference = preference;
     cachedAppearanceRevision = revision;
+    cachedAppearanceIdentity = options.identity;
   }
   if (typeof window !== "undefined") {
     window.dispatchEvent(
@@ -42,24 +46,35 @@ export function notifyAppearanceChange(
 export function cacheAppearancePreference(
   preference: AppearancePreference,
   revision?: string,
+  identity?: string,
 ): void {
   if (typeof document === "undefined") return;
   if (
     revision &&
     cachedAppearanceRevision &&
+    identity === cachedAppearanceIdentity &&
     compareAppearanceRevisions(revision, cachedAppearanceRevision) < 0
   ) {
     if (cachedAppearancePreference) {
-      writeAppearanceCache(cachedAppearancePreference, cachedAppearanceRevision);
+      writeAppearanceCache(
+        cachedAppearancePreference,
+        cachedAppearanceRevision,
+        cachedAppearanceIdentity,
+      );
     }
     return;
   }
   cachedAppearancePreference = preference;
   cachedAppearanceRevision = revision;
-  writeAppearanceCache(preference, revision);
+  cachedAppearanceIdentity = identity;
+  writeAppearanceCache(preference, revision, identity);
 }
 
-function writeAppearanceCache(preference: AppearancePreference, revision?: string): void {
+function writeAppearanceCache(
+  preference: AppearancePreference,
+  revision?: string,
+  identity?: string,
+): void {
   const secure = typeof window !== "undefined" && window.location.protocol === "https:";
   document.cookie = [
     `${APPEARANCE_COOKIE}=${encodeURIComponent(preference)}`,
@@ -81,6 +96,17 @@ function writeAppearanceCache(preference: AppearancePreference, revision?: strin
       .filter(Boolean)
       .join("; ");
   }
+  if (identity) {
+    document.cookie = [
+      APPEARANCE_IDENTITY_COOKIE + "=" + encodeURIComponent(identity),
+      "path=/",
+      "max-age=" + APPEARANCE_COOKIE_MAX_AGE_SECONDS,
+      "samesite=lax",
+      secure ? "secure" : undefined,
+    ]
+      .filter(Boolean)
+      .join("; ");
+  }
 }
 
 export function clearAppearancePreferenceCache(): void {
@@ -89,6 +115,8 @@ export function clearAppearancePreferenceCache(): void {
   cachedAppearanceRevision = undefined;
   document.cookie = APPEARANCE_COOKIE + "=; path=/; max-age=0";
   document.cookie = APPEARANCE_REVISION_COOKIE + "=; path=/; max-age=0";
+  document.cookie = APPEARANCE_IDENTITY_COOKIE + "=; path=/; max-age=0";
+  cachedAppearanceIdentity = undefined;
 }
 
 export function resolveAppearance(

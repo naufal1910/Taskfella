@@ -15,17 +15,20 @@ interface ThemeControllerProps {
   initialPreference: AppearancePreference;
   serverOwnsPreference: boolean;
   initialRevision?: string;
+  initialIdentity?: string;
 }
 
 export function ThemeController({
   initialPreference,
   serverOwnsPreference,
   initialRevision,
+  initialIdentity,
 }: ThemeControllerProps) {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     let authoritativePreference = serverOwnsPreference ? initialPreference : undefined;
     let authoritativeRevision = serverOwnsPreference ? initialRevision : readAppearanceRevision();
+    let authoritativeIdentity = serverOwnsPreference ? initialIdentity : undefined;
     let authenticationReset = false;
     const applyCurrent = () => {
       const preference = authoritativePreference ?? readAppearanceCookie();
@@ -38,11 +41,13 @@ export function ThemeController({
               preference?: unknown;
               revision?: unknown;
               authenticated?: boolean;
+              identity?: unknown;
               reset?: boolean;
             })
           : undefined;
       if (detail && isAppearancePreference(detail.preference)) {
         const revision = typeof detail.revision === "string" ? detail.revision : undefined;
+        const identity = typeof detail.identity === "string" ? detail.identity : undefined;
         const reset = detail.reset === true;
         const authenticated = detail.authenticated === true;
         if (reset) {
@@ -56,12 +61,14 @@ export function ThemeController({
           !reset &&
           revision &&
           authoritativeRevision &&
+          identity === authoritativeIdentity &&
           compareAppearanceRevisions(revision, authoritativeRevision) < 0
         ) {
           return;
         }
         authoritativePreference = detail.preference;
         authoritativeRevision = revision;
+        authoritativeIdentity = reset ? undefined : (identity ?? authoritativeIdentity);
       } else if (!serverOwnsPreference) {
         authoritativePreference = readAppearanceCookie();
         authoritativeRevision = readAppearanceRevision();
@@ -76,7 +83,7 @@ export function ThemeController({
       media.removeEventListener("change", applyCurrent);
       window.removeEventListener(APPEARANCE_CHANGE_EVENT, updateFromAppearanceEvent);
     };
-  }, [initialPreference, initialRevision, serverOwnsPreference]);
+  }, [initialIdentity, initialPreference, initialRevision, serverOwnsPreference]);
 
   return null;
 }

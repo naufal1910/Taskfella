@@ -449,7 +449,11 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           error?: ApiError;
           message?: string;
           status?: "pending" | "success";
-          account?: { appearance?: AppearancePreference; appearanceRevision?: string };
+          account?: {
+            id?: string;
+            appearance?: AppearancePreference;
+            appearanceRevision?: string;
+          };
         };
 
         if (!response.ok) {
@@ -498,7 +502,9 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           notifyAppearanceChange(
             mode === "login" ? (payload.account?.appearance ?? "system") : "system",
             mode === "login" ? payload.account?.appearanceRevision : APPEARANCE_RESET_REVISION,
-            mode === "login" ? { authenticated: true } : { reset: true },
+            mode === "login"
+              ? { authenticated: true, identity: payload.account?.id }
+              : { reset: true },
           );
         }
         if (mode === "login") {

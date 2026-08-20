@@ -3,7 +3,6 @@ import { headers } from "next/headers";
 import { ThemeController } from "@/components/theme/theme-controller";
 import { resolveAuthenticatedAccount } from "@/server/http/authentication";
 import { APPEARANCE_VALUES, type Appearance } from "@/server/modules/account/settings";
-import { getAppearanceCookie, getAppearanceRevisionCookie } from "@/server/modules/auth/cookies";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,16 +12,15 @@ export const metadata: Metadata = {
 
 interface InitialAppearance {
   preference: Appearance;
-  authenticated: boolean;
+  serverOwnsPreference: boolean;
   revision?: string;
+  identity?: string;
 }
 
 async function resolveInitialAppearance(): Promise<InitialAppearance> {
   const request = new Request("http://taskfella.internal", {
     headers: new Headers(await headers()),
   });
-  const cached = getAppearanceCookie(request);
-  const cachedRevision = getAppearanceRevisionCookie(request);
   let authenticated: Awaited<ReturnType<typeof resolveAuthenticatedAccount>> = null;
   try {
     authenticated = await resolveAuthenticatedAccount(request);
@@ -35,11 +33,12 @@ async function resolveInitialAppearance(): Promise<InitialAppearance> {
       preference: APPEARANCE_VALUES.includes(preference as Appearance)
         ? (preference as Appearance)
         : "system",
-      authenticated: true,
+      serverOwnsPreference: true,
       revision: authenticated.accountVersion,
+      identity: authenticated.account.id,
     };
   }
-  return { preference: cached ?? "system", authenticated: false, revision: cachedRevision };
+  return { preference: "system", serverOwnsPreference: true };
 }
 
 export function themeBootstrap(initialAppearance: InitialAppearance): string {
@@ -47,7 +46,7 @@ export function themeBootstrap(initialAppearance: InitialAppearance): string {
 (function () {
   try {
     var serverPreference = ${JSON.stringify(initialAppearance.preference)};
-    var serverOwnsPreference = ${initialAppearance.authenticated ? "true" : "false"};
+    var serverOwnsPreference = ${initialAppearance.serverOwnsPreference ? "true" : "false"};
     var match = document.cookie.match(/(?:^|;\\s*)taskfella_appearance=([^;]+)/);
     var preference = serverPreference;
     if (!serverOwnsPreference && match) {
@@ -96,8 +95,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body>
         <ThemeController
           initialPreference={initialAppearance.preference}
-          serverOwnsPreference={initialAppearance.authenticated}
+          serverOwnsPreference={initialAppearance.serverOwnsPreference}
           initialRevision={initialAppearance.revision}
+          initialIdentity={initialAppearance.identity}
         />
         {children}
       </body>
