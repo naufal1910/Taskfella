@@ -5,6 +5,7 @@ import { useState } from "react";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
   APPEARANCE_RESET_REVISION,
+  beginAppearanceLifecycle,
   clearAppearancePreferenceCache,
   notifyAppearanceChange,
 } from "@/components/theme/theme";
@@ -40,7 +41,11 @@ export function LogoutForm() {
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
       clearAppearancePreferenceCache();
-      notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, { reset: true });
+      const generation = beginAppearanceLifecycle();
+      notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
+        generation,
+        reset: true,
+      });
       setMessage("You are signed out. The session cookie was cleared.");
     } catch {
       setMessageTone("error");

@@ -1,5 +1,6 @@
 export interface AppearanceMutationTracker<T> {
   advance(): number;
+  current(): number;
   isCurrent(revision: number): boolean;
   recordSaved(value: T): void;
   getSaved(): T | undefined;
@@ -11,6 +12,9 @@ export function createAppearanceMutationTracker<T>(): AppearanceMutationTracker<
   return {
     advance(): number {
       currentRevision += 1;
+      return currentRevision;
+    },
+    current(): number {
       return currentRevision;
     },
     isCurrent(revision: number): boolean {

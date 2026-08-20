@@ -27,6 +27,7 @@ export const accounts = pgTable(
     displayName: text("display_name").notNull().default(""),
     timezone: text("timezone").notNull().default("UTC"),
     appearance: text("appearance").notNull().default("system"),
+    appearanceRevision: integer("appearance_revision").notNull().default(0),
     notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
     soundEnabled: boolean("sound_enabled").notNull().default(true),
     focusDurationMinutes: integer("focus_duration_minutes").notNull().default(25),

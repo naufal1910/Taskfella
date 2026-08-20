@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { eq, getTableColumns, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { type Database } from "@/server/db/client";
 import { accounts, passwordCredentials, type Account } from "@/server/db/schema";
 import { settingsFromAccountInput, type AccountSettings } from "@/server/modules/account/settings";
@@ -89,17 +89,8 @@ export async function getAccountWithVersion(
   db: Database,
   accountId: string,
 ): Promise<{ account: Account; version: string } | null> {
-  const [row] = await db
-    .select({
-      ...getTableColumns(accounts),
-      version: sql<string>`xmin::text`,
-    })
-    .from(accounts)
-    .where(eq(accounts.id, accountId))
-    .limit(1);
-  if (!row) return null;
-  const { version, ...account } = row;
-  return { account, version };
+  const [account] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
+  return account ? { account, version: String(account.appearanceRevision) } : null;
 }
 
 export async function getAccountByNormalizedEmail(

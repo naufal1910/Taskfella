@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
   APPEARANCE_RESET_REVISION,
+  beginAppearanceLifecycle,
   cacheAppearancePreference,
   clearAppearancePreferenceCache,
   notifyAppearanceChange,
@@ -70,7 +71,11 @@ function LogoutControl() {
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
       clearAppearancePreferenceCache();
-      notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, { reset: true });
+      const generation = beginAppearanceLifecycle();
+      notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
+        generation,
+        reset: true,
+      });
       setMessage("You are signed out.");
       router.push("/login");
     } catch {
@@ -189,7 +194,11 @@ export function AccountState() {
         if (!active) return;
         if (response.status === 401) {
           clearAppearancePreferenceCache();
-          notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, { reset: true });
+          const generation = beginAppearanceLifecycle();
+          notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
+            generation,
+            reset: true,
+          });
           setUnauthenticated(true);
           return;
         }

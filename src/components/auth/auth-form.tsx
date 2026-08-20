@@ -13,6 +13,8 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
   APPEARANCE_RESET_REVISION,
+  beginAppearanceLifecycle,
+  cacheAppearancePreference,
   clearAppearancePreferenceCache,
   detectBrowserTimezone,
   notifyAppearanceChange,
@@ -407,6 +409,8 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         setFieldErrors(nextFieldErrors);
         return;
       }
+      const lifecycleGeneration =
+        mode === "login" || mode === "reset" ? beginAppearanceLifecycle() : undefined;
 
       const endpoint =
         mode === "signup"
@@ -498,13 +502,24 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         if (mode === "login" || mode === "reset") {
           if (mode === "reset") {
             clearAppearancePreferenceCache();
+          } else if (payload.account?.appearance) {
+            cacheAppearancePreference(
+              payload.account.appearance,
+              payload.account.appearanceRevision,
+              payload.account.id,
+              lifecycleGeneration,
+            );
           }
           notifyAppearanceChange(
             mode === "login" ? (payload.account?.appearance ?? "system") : "system",
             mode === "login" ? payload.account?.appearanceRevision : APPEARANCE_RESET_REVISION,
             mode === "login"
-              ? { authenticated: true, identity: payload.account?.id }
-              : { reset: true },
+              ? {
+                  authenticated: true,
+                  generation: lifecycleGeneration,
+                  identity: payload.account?.id,
+                }
+              : { generation: lifecycleGeneration, reset: true },
           );
         }
         if (mode === "login") {

@@ -115,27 +115,26 @@ async function update(request: Request): Promise<NextResponse> {
         let updated: typeof accounts.$inferSelect | undefined;
         let appearanceRevision: string | undefined;
         if (appearancePatch) {
-          const result = await database.transaction(async (tx) => {
+          const expectedRevision = Number.parseInt(accountVersion, 10);
+          if (!Number.isSafeInteger(expectedRevision)) {
+            throw new AppError("CONFLICT");
+          }
+          [updated] = await database.transaction(async (tx) => {
             await tx.execute(
               sql`SELECT pg_advisory_xact_lock(hashtext(CAST(${account.id} AS text)))`,
             );
-            const [updated] = await tx
+            return tx
               .update(accounts)
-              .set({ ...patch, updatedAt: new Date() })
-              .where(and(eq(accounts.id, account.id), sql`xmin::text = ${accountVersion}`))
+              .set({
+                ...patch,
+                appearanceRevision: sql`${accounts.appearanceRevision} + 1`,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(eq(accounts.id, account.id), eq(accounts.appearanceRevision, expectedRevision)),
+              )
               .returning();
-            if (!updated) {
-              return { updated, revision: undefined };
-            }
-            const [version] = await tx
-              .select({ value: sql<string>`xmin::text` })
-              .from(accounts)
-              .where(eq(accounts.id, account.id))
-              .limit(1);
-            return { updated, revision: version?.value };
           });
-          updated = result.updated;
-          appearanceRevision = result.revision;
         } else {
           [updated] = await database
             .update(accounts)
@@ -148,6 +147,7 @@ async function update(request: Request): Promise<NextResponse> {
           if (appearancePatch) throw new AppError("CONFLICT");
           throw new Error("Account settings could not be saved.");
         }
+        appearanceRevision = String(updated.appearanceRevision);
 
         return accountResponse(updated, appearanceRevision);
       },

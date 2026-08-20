@@ -43,6 +43,13 @@
       "when": 1787330251367,
       "tag": "0005_blue_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787330885337,
+      "tag": "0006_perpetual_umar",
+      "breakpoints": true
     }
   ]
 }

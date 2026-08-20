@@ -32,7 +32,7 @@ Exact event timestamps remain UTC. The account timezone is the later reporting/d
 
 The server sets a non-sensitive `taskfella_appearance` cache cookie after login and clears it on logout/password reset. Account reads and successful settings mutations return an account identity and revision; clients update the cache only after confirming that revision is current. It is not an authorization or source-of-truth value; PostgreSQL remains authoritative. The root layout runs a small pre-paint bootstrap that resolves `system` through `prefers-color-scheme`, and a client controller follows later system-preference changes. Explicit theme selectors override the system media query without a hydration-dependent flash. The existing reduced-motion and forced-colors rules remain active.
 
-If the cache is absent or invalid, the browser falls back to its system preference and the authenticated account read restores the persisted choice.
+For authenticated requests, the root layout resolves the persisted account preference before paint, even when the cache is absent or invalid. Unauthenticated requests use the system preference; authenticated client reads and mutations refresh the revision-scoped cache after the response is accepted.
 
 ## Verification
 

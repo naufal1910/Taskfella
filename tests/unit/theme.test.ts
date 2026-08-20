@@ -71,12 +71,14 @@ describe("appearance resolution", () => {
     try {
       notifyAppearanceChange("dark", "42", {
         authenticated: true,
+        generation: 2,
         identity: "account-a",
       });
       expect(received).toEqual({
         preference: "dark",
         revision: "42",
         authenticated: true,
+        generation: 2,
         identity: "account-a",
         reset: false,
       });

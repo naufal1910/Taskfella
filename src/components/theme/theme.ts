@@ -12,15 +12,37 @@ export { detectBrowserTimezone } from "@/shared/timezone";
 let cachedAppearancePreference: AppearancePreference | undefined;
 let cachedAppearanceRevision: string | undefined;
 let cachedAppearanceIdentity: string | undefined;
+let cachedAppearanceGeneration: number | undefined;
+let appearanceLifecycleGeneration = 0;
+
+export function beginAppearanceLifecycle(): number {
+  appearanceLifecycleGeneration += 1;
+  return appearanceLifecycleGeneration;
+}
 
 export function notifyAppearanceChange(
   preference: AppearancePreference,
   revision?: string,
-  options: { authenticated?: boolean; identity?: string; reset?: boolean } = {},
+  options: {
+    authenticated?: boolean;
+    generation?: number;
+    identity?: string;
+    reset?: boolean;
+  } = {},
 ): void {
+  if (
+    options.generation !== undefined &&
+    cachedAppearanceGeneration !== undefined &&
+    options.generation < cachedAppearanceGeneration
+  ) {
+    return;
+  }
   if (
     revision &&
     (revision === APPEARANCE_RESET_REVISION ||
+      (options.generation !== undefined &&
+        (cachedAppearanceGeneration === undefined ||
+          options.generation >= cachedAppearanceGeneration)) ||
       options.identity !== cachedAppearanceIdentity ||
       !cachedAppearanceRevision ||
       compareAppearanceRevisions(revision, cachedAppearanceRevision) >= 0)
@@ -28,6 +50,7 @@ export function notifyAppearanceChange(
     cachedAppearancePreference = preference;
     cachedAppearanceRevision = revision;
     cachedAppearanceIdentity = options.identity;
+    cachedAppearanceGeneration = options.generation ?? cachedAppearanceGeneration;
   }
   if (typeof window !== "undefined") {
     window.dispatchEvent(
@@ -36,6 +59,7 @@ export function notifyAppearanceChange(
           preference,
           revision,
           authenticated: options.authenticated === true,
+          generation: options.generation,
           identity: options.identity,
           reset: options.reset === true,
         },
@@ -48,8 +72,23 @@ export function cacheAppearancePreference(
   preference: AppearancePreference,
   revision?: string,
   identity?: string,
+  generation?: number,
 ): void {
   if (typeof document === "undefined") return;
+  if (
+    generation !== undefined &&
+    cachedAppearanceGeneration !== undefined &&
+    generation < cachedAppearanceGeneration
+  ) {
+    if (cachedAppearancePreference) {
+      writeAppearanceCache(
+        cachedAppearancePreference,
+        cachedAppearanceRevision,
+        cachedAppearanceIdentity,
+      );
+    }
+    return;
+  }
   if (
     revision &&
     cachedAppearanceRevision &&
@@ -68,6 +107,7 @@ export function cacheAppearancePreference(
   cachedAppearancePreference = preference;
   cachedAppearanceRevision = revision;
   cachedAppearanceIdentity = identity;
+  cachedAppearanceGeneration = generation ?? cachedAppearanceGeneration;
   writeAppearanceCache(preference, revision, identity);
 }
 
