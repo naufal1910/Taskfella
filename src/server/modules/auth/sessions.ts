@@ -5,6 +5,9 @@ import { generateOpaqueToken, hashBearerToken } from "./tokens";
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+type SessionTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+export type SessionDatabase = Database | SessionTransaction;
+
 export type AuthenticatedSession = Pick<
   Session,
   | "id"
@@ -45,7 +48,7 @@ function expiryFrom(now: Date, ttlMs: number): Date {
 }
 
 export async function createSession(
-  db: Database,
+  db: SessionDatabase,
   accountId: string,
   options: { now?: Date; ttlMs?: number } = {},
 ): Promise<CreatedSession> {
@@ -110,13 +113,9 @@ export async function lookupSession(
   return updated ?? null;
 }
 
-/**
- * Revoke the presented session and issue a replacement in one transaction.
- * The conditional update makes concurrent rotations single-winner: a second
- * request cannot rotate an already-revoked bearer value.
- */
-export async function rotateSession(
-  db: Database,
+/** Rotate a bearer value while the caller's transaction still owns the row update. */
+export async function rotateSessionInTransaction(
+  tx: SessionTransaction,
   token: string,
   options: { now?: Date; ttlMs?: number } = {},
 ): Promise<CreatedSession | null> {
@@ -129,50 +128,102 @@ export async function rotateSession(
 
   const now = options.now ?? new Date();
   const expiresAt = expiryFrom(now, options.ttlMs ?? SESSION_TTL_MS);
+  const [oldSession] = await tx
+    .update(sessions)
+    .set({ revokedAt: now, revokedReason: "rotated" })
+    .where(
+      and(
+        eq(sessions.tokenHash, tokenHash),
+        isNull(sessions.revokedAt),
+        gt(sessions.expiresAt, now),
+      ),
+    )
+    .returning({ id: sessions.id, accountId: sessions.accountId });
 
-  return db.transaction(async (tx) => {
-    const [oldSession] = await tx
-      .update(sessions)
-      .set({ revokedAt: now, revokedReason: "rotated" })
-      .where(
-        and(
-          eq(sessions.tokenHash, tokenHash),
-          isNull(sessions.revokedAt),
-          gt(sessions.expiresAt, now),
-        ),
-      )
-      .returning({
-        id: sessions.id,
-        accountId: sessions.accountId,
-      });
+  if (!oldSession) {
+    return null;
+  }
 
-    if (!oldSession) {
-      return null;
+  const replacementToken = generateOpaqueToken();
+  const [replacement] = await tx
+    .insert(sessions)
+    .values({
+      accountId: oldSession.accountId,
+      tokenHash: hashBearerToken(replacementToken),
+      expiresAt,
+      createdAt: now,
+      lastAccessedAt: now,
+    })
+    .returning(sessionFields());
+
+  if (!replacement) {
+    throw new Error("Replacement session could not be created.");
+  }
+
+  await tx
+    .update(sessions)
+    .set({ replacedBySessionId: replacement.id })
+    .where(eq(sessions.id, oldSession.id));
+
+  return { session: replacement, token: replacementToken };
+}
+
+/**
+ * Revoke the presented session and issue a replacement in one transaction.
+ * The conditional update makes concurrent rotations single-winner: a second
+ * request cannot rotate an already-revoked bearer value.
+ */
+export async function rotateSession(
+  db: Database,
+  token: string,
+  options: { now?: Date; ttlMs?: number } = {},
+): Promise<CreatedSession | null> {
+  return db.transaction((tx) => rotateSessionInTransaction(tx, token, options));
+}
+
+/** Issue a session for an OAuth account without reusing a foreign browser session. */
+export async function issueSessionForAccountInTransaction(
+  tx: SessionTransaction,
+  accountId: string,
+  options: { presentedToken?: string; now?: Date; ttlMs?: number } = {},
+): Promise<CreatedSession> {
+  const now = options.now ?? new Date();
+  const presentedToken = options.presentedToken;
+  if (presentedToken) {
+    let tokenHash: string | undefined;
+    try {
+      tokenHash = hashBearerToken(presentedToken);
+    } catch {
+      tokenHash = undefined;
     }
 
-    const replacementToken = generateOpaqueToken();
-    const [replacement] = await tx
-      .insert(sessions)
-      .values({
-        accountId: oldSession.accountId,
-        tokenHash: hashBearerToken(replacementToken),
-        expiresAt,
-        createdAt: now,
-        lastAccessedAt: now,
-      })
-      .returning(sessionFields());
+    if (tokenHash) {
+      const [existing] = await tx
+        .select({
+          id: sessions.id,
+          accountId: sessions.accountId,
+          expiresAt: sessions.expiresAt,
+          revokedAt: sessions.revokedAt,
+        })
+        .from(sessions)
+        .where(eq(sessions.tokenHash, tokenHash))
+        .for("update");
 
-    if (!replacement) {
-      throw new Error("Replacement session could not be created.");
+      if (existing?.accountId === accountId && !existing.revokedAt && existing.expiresAt > now) {
+        const rotated = await rotateSessionInTransaction(tx, presentedToken, options);
+        if (rotated) {
+          return rotated;
+        }
+      } else if (existing && !existing.revokedAt) {
+        await tx
+          .update(sessions)
+          .set({ revokedAt: now, revokedReason: "login-replaced" })
+          .where(and(eq(sessions.id, existing.id), isNull(sessions.revokedAt)));
+      }
     }
+  }
 
-    await tx
-      .update(sessions)
-      .set({ replacedBySessionId: replacement.id })
-      .where(eq(sessions.id, oldSession.id));
-
-    return { session: replacement, token: replacementToken };
-  });
+  return createSession(tx, accountId, options);
 }
 
 export async function revokeSession(

@@ -34,6 +34,20 @@ Phase 1B defaults non-production environments to `EMAIL_DELIVERY_MODE=local`. Ve
 
 Production startup rejects local delivery. Set `AUTH_TRUSTED_PROXY=true` behind the trusted edge, then set `EMAIL_DELIVERY_MODE=smtp`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM`, and configure the documented port, TLS mode, and optional paired SMTP credentials. The app uses the portable SMTP transport and never falls back to local capture.
 
+## Google OAuth
+
+Google credentials are optional in local development. If they are omitted, the Google sign-in action reports that it is not configured and email/password authentication remains available. If either value is supplied, both must be supplied and valid; production startup refuses missing, partial, or malformed configuration.
+
+Use a Google OAuth **Web application** client and register this exact callback URL:
+
+```text
+http://localhost:3000/api/auth/google/callback
+```
+
+For deployment, replace only the origin with the HTTPS `APP_URL`, for example `https://taskfella.example/api/auth/google/callback`. Copy the commented `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` placeholders from `.env.example` into the local `.env` only after creating the client. Never commit or print their values. The server requests only `openid email`, uses state plus S256 PKCE, and does not request or store refresh tokens.
+
+The account page's **Link Google account** action is an explicit authenticated ceremony. A Google email matching an existing account during sign-in is never silently linked; sign in with the existing method first and then start linking from that account. See the [Phase 1C implementation note](implementation/taskfella-phase1c-google-oauth.md) for callback, conflict, replay, and session-rotation semantics.
+
 ## Production lifecycle
 
-Build the image with `docker build -t taskfella:local .`. Supply `DATABASE_URL`, `APP_URL`, and the required SMTP settings only at runtime, run `pnpm db:migrate` from a controlled deployment environment, then start the standalone image. PostgreSQL backups, TLS termination, and secret delivery belong to the deployment environment. Opaque session tokens do not require a deployment-wide session secret.
+Build the image with `docker build -t taskfella:local .`. Supply `DATABASE_URL`, `APP_URL`, the required SMTP settings, and the Google OAuth client pair only at runtime, run `pnpm db:migrate` from a controlled deployment environment, then start the standalone image. PostgreSQL backups, TLS termination, and secret delivery belong to the deployment environment. Opaque session tokens do not require a deployment-wide session secret.

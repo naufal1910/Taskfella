@@ -2,7 +2,7 @@
 
 Taskfella is an open-source, personal-first, board-first workspace for focused execution. It will bring Kanban planning, Pomodoro focus, manual time tracking, and personal analytics into one calm daily workflow.
 
-This repository currently contains **Phase 0 plus Phase 1A and Phase 1B: the application, authentication foundation, and email/password identity lifecycle**. Google OAuth, boards, tasks, timers, analytics, and exports remain later-phase behavior.
+This repository currently contains **Phase 0 plus Phase 1A, Phase 1B, and Phase 1C: the application, authentication foundation, email/password lifecycle, and Google OAuth with explicit identity linking**. Boards, tasks, timers, analytics, and exports remain later-phase behavior.
 
 ## Quick start
 
@@ -63,6 +63,8 @@ docker run --rm -p 3000:3000 \
   -e EMAIL_FROM='Taskfella <no-reply@example>' \
   -e EMAIL_SMTP_USER='smtp-user' \
   -e EMAIL_SMTP_PASSWORD='supply-at-runtime' \
+  -e GOOGLE_CLIENT_ID='your-client-id.apps.googleusercontent.com' \
+  -e GOOGLE_CLIENT_SECRET='supply-at-runtime' \
   taskfella:local
 ```
 
@@ -77,9 +79,10 @@ The contributor-facing validator command and zero-error/zero-warning requirement
 
 - [Approved product specification](docs/specification/taskfella-mvp-design.md)
 - [Approved implementation analysis and phased plan](docs/implementation/taskfella-analysis.md)
-- [Phase 0 through Phase 1B documentation index](docs/README.md)
+- [Phase 0 through Phase 1C documentation index](docs/README.md)
 - [Phase 1A authentication foundation](docs/implementation/taskfella-phase1a-auth.md)
 - [Phase 1B email/password authentication](docs/implementation/taskfella-phase1b-auth.md)
+- [Phase 1C Google OAuth and explicit identity linking](docs/implementation/taskfella-phase1c-google-oauth.md)
 - [Public roadmap](https://github.com/users/naufal1910/projects/4)
 - [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2)
 - [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13)

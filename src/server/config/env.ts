@@ -32,6 +32,22 @@ const environmentSchema = z
     EMAIL_SMTP_USER: z.string().min(1).optional(),
     EMAIL_SMTP_PASSWORD: z.string().min(1).optional(),
     EMAIL_FROM: z.string().min(1).optional(),
+    GOOGLE_CLIENT_ID: z
+      .string()
+      .min(1)
+      .max(256)
+      .refine((value) => /^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com$/.test(value), {
+        message: "GOOGLE_CLIENT_ID must be a Google OAuth client ID",
+      })
+      .optional(),
+    GOOGLE_CLIENT_SECRET: z
+      .string()
+      .min(1)
+      .max(512)
+      .refine((value) => !/[\s\u0000-\u001f\u007f]/.test(value), {
+        message: "GOOGLE_CLIENT_SECRET contains invalid characters",
+      })
+      .optional(),
   })
   .superRefine((value, context) => {
     let appUrl: URL;
@@ -45,6 +61,16 @@ const environmentSchema = z
         code: "custom",
         path: ["APP_URL"],
         message: "APP_URL must not contain credentials",
+      });
+    }
+
+    const hasGoogleClientId = Boolean(value.GOOGLE_CLIENT_ID);
+    const hasGoogleClientSecret = Boolean(value.GOOGLE_CLIENT_SECRET);
+    if (hasGoogleClientId !== hasGoogleClientSecret) {
+      context.addIssue({
+        code: "custom",
+        path: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+        message: "Google OAuth client ID and secret must be supplied together",
       });
     }
 
@@ -98,6 +124,24 @@ const environmentSchema = z
         message: "SMTP credentials must be supplied together",
       });
     }
+
+    if (!hasGoogleClientId || !hasGoogleClientSecret) {
+      context.addIssue({
+        code: "custom",
+        path: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+        message: "production requires Google OAuth credentials",
+      });
+    }
+    if (
+      value.GOOGLE_CLIENT_ID?.startsWith("replace-with-") ||
+      value.GOOGLE_CLIENT_SECRET?.startsWith("replace-with-")
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+        message: "production Google OAuth configuration cannot use placeholders",
+      });
+    }
   });
 
 type ParsedEnvironment = z.infer<typeof environmentSchema>;
@@ -136,6 +180,8 @@ function selectEnvironment(input: EnvironmentInput): Record<string, string | und
     EMAIL_SMTP_USER: input.EMAIL_SMTP_USER,
     EMAIL_SMTP_PASSWORD: input.EMAIL_SMTP_PASSWORD,
     EMAIL_FROM: input.EMAIL_FROM,
+    GOOGLE_CLIENT_ID: input.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: input.GOOGLE_CLIENT_SECRET,
   };
 }
 

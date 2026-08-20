@@ -15,6 +15,14 @@ export type AppErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
   | "RATE_LIMITED"
+  | "OAUTH_NOT_CONFIGURED"
+  | "OAUTH_STATE_INVALID"
+  | "OAUTH_PROVIDER_ERROR"
+  | "OAUTH_CANCELLED"
+  | "IDENTITY_CONFLICT"
+  | "IDENTITY_ALREADY_LINKED"
+  | "ACCOUNT_LINK_REQUIRED"
+  | "OAUTH_SESSION_INVALID"
   | "INTERNAL_ERROR";
 
 const statusByCode: Record<AppErrorCode, number> = {
@@ -32,6 +40,14 @@ const statusByCode: Record<AppErrorCode, number> = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   RATE_LIMITED: 429,
+  OAUTH_NOT_CONFIGURED: 503,
+  OAUTH_STATE_INVALID: 400,
+  OAUTH_PROVIDER_ERROR: 502,
+  OAUTH_CANCELLED: 400,
+  IDENTITY_CONFLICT: 409,
+  IDENTITY_ALREADY_LINKED: 409,
+  ACCOUNT_LINK_REQUIRED: 409,
+  OAUTH_SESSION_INVALID: 401,
   INTERNAL_ERROR: 500,
 };
 
@@ -50,6 +66,14 @@ const messageByCode: Record<AppErrorCode, string> = {
   UNAUTHORIZED: "Authentication is required.",
   FORBIDDEN: "The request is not allowed.",
   RATE_LIMITED: "Too many requests. Try again later.",
+  OAUTH_NOT_CONFIGURED: "Google sign-in is not configured for this environment.",
+  OAUTH_STATE_INVALID: "The Google sign-in request is invalid or has expired. Try again.",
+  OAUTH_PROVIDER_ERROR: "Google sign-in could not be completed. Try again.",
+  OAUTH_CANCELLED: "Google sign-in was cancelled. You can try again.",
+  IDENTITY_CONFLICT: "That Google identity is already linked to another account.",
+  IDENTITY_ALREADY_LINKED: "That Google identity is already linked to this account.",
+  ACCOUNT_LINK_REQUIRED: "Sign in with your existing method, then link Google from your account.",
+  OAUTH_SESSION_INVALID: "Your account session expired. Sign in and try again.",
   INTERNAL_ERROR: "An unexpected error occurred.",
 };
 

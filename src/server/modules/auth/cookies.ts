@@ -7,6 +7,9 @@ export const CSRF_COOKIE_NAME = "taskfella_csrf";
 export const CSRF_HEADER_NAME = "x-csrf-token";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 export const CSRF_COOKIE_MAX_AGE_SECONDS = 24 * 60 * 60;
+export const OAUTH_STATE_COOKIE_NAME = "taskfella_oauth_state";
+export const OAUTH_VERIFIER_COOKIE_NAME = "taskfella_oauth_verifier";
+export const OAUTH_COOKIE_MAX_AGE_SECONDS = 10 * 60;
 
 function readCookie(request: Request, name: string): string | undefined {
   const cookieHeader = request.headers.get("cookie");
@@ -43,6 +46,14 @@ export function getSessionToken(request: Request): string | undefined {
 
 export function getCsrfCookie(request: Request): string | undefined {
   return readCookie(request, CSRF_COOKIE_NAME);
+}
+
+export function getOAuthStateCookie(request: Request): string | undefined {
+  return readCookie(request, OAUTH_STATE_COOKIE_NAME);
+}
+
+export function getOAuthCodeVerifierCookie(request: Request): string | undefined {
+  return readCookie(request, OAUTH_VERIFIER_COOKIE_NAME);
 }
 
 function isProduction(environment: AppEnv): boolean {
@@ -133,4 +144,39 @@ export function ensureCsrfCookie(
   const token = createCsrfToken();
   setCsrfCookie(response, token, environment);
   return token;
+}
+
+/** Store only short-lived OAuth ceremony material in HttpOnly, Lax cookies. */
+export function setOAuthCookies(
+  response: NextResponse,
+  state: string,
+  codeVerifier: string,
+  environment: AppEnv = getEnvironment(),
+): void {
+  setCookie(response, OAUTH_STATE_COOKIE_NAME, state, {
+    maxAge: OAUTH_COOKIE_MAX_AGE_SECONDS,
+    httpOnly: true,
+    secure: isProduction(environment),
+  });
+  setCookie(response, OAUTH_VERIFIER_COOKIE_NAME, codeVerifier, {
+    maxAge: OAUTH_COOKIE_MAX_AGE_SECONDS,
+    httpOnly: true,
+    secure: isProduction(environment),
+  });
+}
+
+export function clearOAuthCookies(
+  response: NextResponse,
+  environment: AppEnv = getEnvironment(),
+): void {
+  setCookie(response, OAUTH_STATE_COOKIE_NAME, "", {
+    maxAge: 0,
+    httpOnly: true,
+    secure: isProduction(environment),
+  });
+  setCookie(response, OAUTH_VERIFIER_COOKIE_NAME, "", {
+    maxAge: 0,
+    httpOnly: true,
+    secure: isProduction(environment),
+  });
 }

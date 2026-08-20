@@ -26,6 +26,8 @@ describe("environment validation", () => {
       EMAIL_SMTP_USER: undefined,
       EMAIL_SMTP_PASSWORD: undefined,
       EMAIL_FROM: undefined,
+      GOOGLE_CLIENT_ID: undefined,
+      GOOGLE_CLIENT_SECRET: undefined,
     });
   });
 
@@ -84,12 +86,49 @@ describe("environment validation", () => {
         EMAIL_SMTP_HOST: "smtp.example",
         EMAIL_FROM: "Taskfella <no-reply@example>",
         EMAIL_SMTP_SECURE: "true",
+        GOOGLE_CLIENT_ID: "local-placeholder.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "local-google-placeholder-secret",
       }),
     ).toMatchObject({
       EMAIL_DELIVERY_MODE: "smtp",
       EMAIL_SMTP_HOST: "smtp.example",
       EMAIL_SMTP_SECURE: true,
       AUTH_TRUSTED_PROXY: true,
+      GOOGLE_CLIENT_ID: "local-placeholder.apps.googleusercontent.com",
+      GOOGLE_CLIENT_SECRET: "local-google-placeholder-secret",
     });
+  });
+
+  it("rejects partial or malformed Google configuration", () => {
+    const base = {
+      NODE_ENV: "test" as const,
+      DATABASE_URL: "postgresql://taskfella:taskfella@localhost:5432/taskfella",
+      APP_URL: "http://localhost:3000",
+    };
+
+    expect(() =>
+      parseEnvironment({ ...base, GOOGLE_CLIENT_ID: "only-one-value.apps.googleusercontent.com" }),
+    ).toThrow(/GOOGLE_CLIENT_ID|GOOGLE_CLIENT_SECRET/);
+    expect(() =>
+      parseEnvironment({
+        ...base,
+        GOOGLE_CLIENT_ID: "not-a-google-client-id",
+        GOOGLE_CLIENT_SECRET: "replace-with-google-client-secret",
+      }),
+    ).toThrow(/GOOGLE_CLIENT_ID/);
+  });
+
+  it("requires Google configuration in production", () => {
+    expect(() =>
+      parseEnvironment({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://taskfella:taskfella@localhost:5432/taskfella",
+        APP_URL: "https://taskfella.example",
+        AUTH_TRUSTED_PROXY: "true",
+        EMAIL_DELIVERY_MODE: "smtp",
+        EMAIL_SMTP_HOST: "smtp.example",
+        EMAIL_FROM: "Taskfella <no-reply@example>",
+      }),
+    ).toThrow(/GOOGLE_CLIENT_ID|GOOGLE_CLIENT_SECRET/);
   });
 });
