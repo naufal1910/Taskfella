@@ -17,7 +17,12 @@ const themeBootstrap = `
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
   } catch (_) {
-    document.documentElement.dataset.theme = "light";
+    var fallbackSystemDark =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var fallbackTheme = fallbackSystemDark ? "dark" : "light";
+    document.documentElement.dataset.theme = fallbackTheme;
+    document.documentElement.style.colorScheme = fallbackTheme;
   }
 })();`;
 

@@ -11,7 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
-import { detectBrowserTimezone } from "@/components/theme/theme";
+import { detectBrowserTimezone, notifyAppearanceChange } from "@/components/theme/theme";
 import {
   type AuthFieldErrors,
   type AuthFormMode,
@@ -483,6 +483,9 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           if (window.history.replaceState) {
             window.history.replaceState({}, "", "/reset-password");
           }
+        }
+        if (mode === "login" || mode === "reset") {
+          notifyAppearanceChange();
         }
         if (mode === "login") {
           router.push("/account");

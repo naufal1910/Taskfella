@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { applyAppearance, applyAppearanceFromCookie, readAppearanceCookie } from "./theme";
+import { APPEARANCE_CHANGE_EVENT, applyAppearance, readAppearanceCookie } from "./theme";
 
 export function ThemeController() {
   useEffect(() => {
@@ -11,9 +11,13 @@ export function ThemeController() {
       applyAppearance(preference, media.matches);
     };
 
-    applyAppearanceFromCookie();
+    update();
     media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
+    window.addEventListener(APPEARANCE_CHANGE_EVENT, update);
+    return () => {
+      media.removeEventListener("change", update);
+      window.removeEventListener(APPEARANCE_CHANGE_EVENT, update);
+    };
   }, []);
 
   return null;

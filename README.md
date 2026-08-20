@@ -79,7 +79,7 @@ The contributor-facing validator command and zero-error/zero-warning requirement
 
 - [Approved product specification](docs/specification/taskfella-mvp-design.md)
 - [Approved implementation analysis and phased plan](docs/implementation/taskfella-analysis.md)
-- [Phase 0 through Phase 1C documentation index](docs/README.md)
+- [Phase 0 through Phase 1D documentation index](docs/README.md)
 - [Phase 1A authentication foundation](docs/implementation/taskfella-phase1a-auth.md)
 - [Phase 1B email/password authentication](docs/implementation/taskfella-phase1b-auth.md)
 - [Phase 1C Google OAuth and explicit identity linking](docs/implementation/taskfella-phase1c-google-oauth.md)

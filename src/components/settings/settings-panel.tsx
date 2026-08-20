@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
-  applyAppearance,
   detectBrowserTimezone,
+  notifyAppearanceChange,
   type AppearancePreference,
 } from "@/components/theme/theme";
 
@@ -104,6 +104,53 @@ function valuesFromAccount(account: AccountPayload): SettingsValues {
   };
 }
 
+const PATCHED_SETTINGS_KEYS = [
+  "displayName",
+  "timezone",
+  "appearance",
+  "notificationsEnabled",
+  "soundEnabled",
+  "focusDurationMinutes",
+  "shortBreakDurationMinutes",
+  "longBreakDurationMinutes",
+  "longBreakInterval",
+] as const satisfies readonly (keyof SettingsValues)[];
+
+function patchValueMatchesCurrent(
+  key: (typeof PATCHED_SETTINGS_KEYS)[number],
+  submitted: unknown,
+  current: SettingsValues,
+): boolean {
+  const currentValue = current[key];
+  if (
+    key === "focusDurationMinutes" ||
+    key === "shortBreakDurationMinutes" ||
+    key === "longBreakDurationMinutes" ||
+    key === "longBreakInterval"
+  ) {
+    return String(submitted) === currentValue;
+  }
+  return submitted === currentValue;
+}
+
+function valuesAfterSave(
+  current: SettingsValues,
+  account: AccountPayload,
+  patch: Record<string, unknown>,
+): SettingsValues {
+  const saved = valuesFromAccount(account);
+  const next = { ...current };
+  for (const key of PATCHED_SETTINGS_KEYS) {
+    if (
+      Object.prototype.hasOwnProperty.call(patch, key) &&
+      patchValueMatchesCurrent(key, patch[key], current)
+    ) {
+      Object.assign(next, { [key]: saved[key] });
+    }
+  }
+  return next;
+}
+
 function readCookie(name: string): string | undefined {
   const prefix = `${name}=`;
   const part = document.cookie
@@ -186,12 +233,21 @@ export function SettingsPanel() {
   const [detectedTimezone] = useState<string | undefined>(() =>
     typeof window === "undefined" ? undefined : detectBrowserTimezone(),
   );
-  const [pendingSection, setPendingSection] = useState<Section>();
+  const [pendingSections, setPendingSections] = useState<ReadonlySet<Section>>(() => new Set());
   const [status, setStatus] = useState<string>();
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [unauthenticated, setUnauthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  function setSectionPending(section: Section, pending: boolean): void {
+    setPendingSections((current) => {
+      const next = new Set(current);
+      if (pending) next.add(section);
+      else next.delete(section);
+      return next;
+    });
+  }
 
   useEffect(() => {
     let active = true;
@@ -207,6 +263,7 @@ export function SettingsPanel() {
         if (!payload.account) throw new Error("account");
         setAccount(payload.account);
         setValues(valuesFromAccount(payload.account));
+        notifyAppearanceChange();
       })
       .catch(() => {
         if (active) setError("We could not load your settings. Try again.");
@@ -227,7 +284,7 @@ export function SettingsPanel() {
   }
 
   async function save(section: Section, patch: Record<string, unknown>): Promise<void> {
-    setPendingSection(section);
+    setSectionPending(section, true);
     setStatus(undefined);
     setError(undefined);
     try {
@@ -256,13 +313,20 @@ export function SettingsPanel() {
         throw new Error("save");
       }
       setAccount(payload.account);
-      setValues(valuesFromAccount(payload.account));
-      setFieldErrors({});
+      setValues((current) =>
+        current
+          ? valuesAfterSave(current, payload.account!, patch)
+          : valuesFromAccount(payload.account!),
+      );
+      setFieldErrors((current) => {
+        const next = { ...current };
+        for (const key of PATCHED_SETTINGS_KEYS) {
+          if (Object.prototype.hasOwnProperty.call(patch, key)) delete next[key];
+        }
+        return next;
+      });
       setStatus("Saved.");
-      if ("appearance" in patch) {
-        const preference = payload.account.appearance ?? "system";
-        applyAppearance(preference, window.matchMedia("(prefers-color-scheme: dark)").matches);
-      }
+      notifyAppearanceChange();
     } catch (caught) {
       setError(
         caught instanceof Error && caught.message === "validation"
@@ -270,7 +334,7 @@ export function SettingsPanel() {
           : errorText(caught),
       );
     } finally {
-      setPendingSection(undefined);
+      setSectionPending(section, false);
     }
   }
 
@@ -400,7 +464,7 @@ export function SettingsPanel() {
             <small id="email-settings-help">Email changes require a separate verified flow.</small>
           </label>
           <div className="settings-actions">
-            <SaveButton pending={pendingSection === "profile"} label="Save profile" />
+            <SaveButton pending={pendingSections.has("profile")} label="Save profile" />
           </div>
         </form>
       </section>
@@ -485,7 +549,7 @@ export function SettingsPanel() {
             <option value="Australia/Sydney" />
           </datalist>
           <div className="settings-actions">
-            <SaveButton pending={pendingSection === "timezone"} label="Save timezone" />
+            <SaveButton pending={pendingSections.has("timezone")} label="Save timezone" />
           </div>
         </form>
       </section>
@@ -536,7 +600,7 @@ export function SettingsPanel() {
             ))}
           </fieldset>
           <div className="settings-actions">
-            <SaveButton pending={pendingSection === "appearance"} label="Save appearance" />
+            <SaveButton pending={pendingSections.has("appearance")} label="Save appearance" />
           </div>
         </form>
       </section>
@@ -579,7 +643,7 @@ export function SettingsPanel() {
             </span>
           </label>
           <div className="settings-actions">
-            <SaveButton pending={pendingSection === "notifications"} label="Save notifications" />
+            <SaveButton pending={pendingSections.has("notifications")} label="Save notifications" />
           </div>
         </form>
       </section>
@@ -621,6 +685,7 @@ export function SettingsPanel() {
               shortBreakDurationMinutes: Number(values.shortBreakDurationMinutes),
               longBreakDurationMinutes: Number(values.longBreakDurationMinutes),
               longBreakInterval: Number(values.longBreakInterval),
+              soundEnabled: values.soundEnabled,
             });
           }}
         >
@@ -679,7 +744,7 @@ export function SettingsPanel() {
             </span>
           </label>
           <div className="settings-actions">
-            <SaveButton pending={pendingSection === "pomodoro"} label="Save Pomodoro settings" />
+            <SaveButton pending={pendingSections.has("pomodoro")} label="Save Pomodoro settings" />
           </div>
         </form>
       </section>

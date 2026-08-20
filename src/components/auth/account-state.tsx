@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
+import { notifyAppearanceChange } from "@/components/theme/theme";
 import { PendingFeedback } from "./pending-feedback";
 
 interface AccountIdentity {
@@ -60,6 +61,7 @@ function LogoutControl() {
       });
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
+      notifyAppearanceChange();
       setMessage("You are signed out.");
       router.push("/login");
     } catch {
@@ -72,6 +74,9 @@ function LogoutControl() {
 
   return (
     <div className="account-action">
+      <Link className="secondary-action" href="/settings">
+        Account settings
+      </Link>
       <button
         className="ui-button ui-button--secondary account-action__button"
         type="button"
@@ -181,6 +186,7 @@ export function AccountState() {
         const payload = (await response.json()) as { account?: AccountPayload };
         if (!payload.account) throw new Error("account");
         setAccount(payload.account);
+        notifyAppearanceChange();
       })
       .catch(() => {
         if (active) setError(true);

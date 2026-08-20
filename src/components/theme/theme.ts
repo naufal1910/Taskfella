@@ -1,7 +1,14 @@
 export const APPEARANCE_COOKIE = "taskfella_appearance";
+export const APPEARANCE_CHANGE_EVENT = "taskfella:appearance-change";
 export const APPEARANCE_PREFERENCES = ["system", "light", "dark"] as const;
 export type AppearancePreference = (typeof APPEARANCE_PREFERENCES)[number];
 export type ResolvedAppearance = "light" | "dark";
+
+export function notifyAppearanceChange(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(APPEARANCE_CHANGE_EVENT));
+  }
+}
 
 export function resolveAppearance(
   preference: AppearancePreference,
