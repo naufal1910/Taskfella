@@ -1,7 +1,8 @@
 export const APPEARANCE_COOKIE = "taskfella_appearance";
 export const APPEARANCE_REVISION_COOKIE = "taskfella_appearance_revision";
 export const APPEARANCE_IDENTITY_COOKIE = "taskfella_appearance_identity";
-export const APPEARANCE_RESET_REVISION = "0";
+export const APPEARANCE_GENERATION_COOKIE = "taskfella_appearance_generation";
+export const APPEARANCE_RESET_REVISION = "reset";
 const APPEARANCE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 export const APPEARANCE_CHANGE_EVENT = "taskfella:appearance-change";
 export const APPEARANCE_PREFERENCES = ["system", "light", "dark"] as const;
@@ -16,8 +17,22 @@ let cachedAppearanceGeneration: number | undefined;
 let appearanceLifecycleGeneration = 0;
 
 export function beginAppearanceLifecycle(): number {
-  appearanceLifecycleGeneration += 1;
+  const sharedGeneration = readAppearanceGeneration();
+  appearanceLifecycleGeneration =
+    Math.max(appearanceLifecycleGeneration, sharedGeneration ?? 0) + 1;
   return appearanceLifecycleGeneration;
+}
+
+export function currentAppearanceLifecycleGeneration(): number {
+  const sharedGeneration = readAppearanceGeneration();
+  if (sharedGeneration !== undefined) {
+    appearanceLifecycleGeneration = Math.max(appearanceLifecycleGeneration, sharedGeneration);
+  }
+  return appearanceLifecycleGeneration;
+}
+
+export function isCurrentAppearanceLifecycle(generation: number): boolean {
+  return currentAppearanceLifecycleGeneration() === generation;
 }
 
 export function notifyAppearanceChange(
@@ -30,6 +45,34 @@ export function notifyAppearanceChange(
     reset?: boolean;
   } = {},
 ): void {
+  if (typeof document !== "undefined") {
+    const sharedRevision = readAppearanceRevision();
+    const sharedIdentity = readAppearanceIdentity();
+    const sharedGeneration = readAppearanceGeneration();
+    if (
+      options.generation !== undefined &&
+      sharedGeneration !== undefined &&
+      options.generation < sharedGeneration
+    ) {
+      return;
+    }
+    if (
+      options.identity &&
+      sharedIdentity &&
+      options.identity !== sharedIdentity &&
+      options.generation === undefined
+    ) {
+      return;
+    }
+    if (
+      revision &&
+      sharedRevision &&
+      options.identity === sharedIdentity &&
+      compareAppearanceRevisions(revision, sharedRevision) < 0
+    ) {
+      return;
+    }
+  }
   if (
     options.generation !== undefined &&
     cachedAppearanceGeneration !== undefined &&
@@ -75,6 +118,23 @@ export function cacheAppearancePreference(
   generation?: number,
 ): void {
   if (typeof document === "undefined") return;
+  const sharedRevision = readAppearanceRevision();
+  const sharedIdentity = readAppearanceIdentity();
+  const sharedGeneration = readAppearanceGeneration();
+  if (generation !== undefined && sharedGeneration !== undefined && generation < sharedGeneration) {
+    return;
+  }
+  if (identity && sharedIdentity && identity !== sharedIdentity && generation === undefined) {
+    return;
+  }
+  if (
+    revision &&
+    sharedRevision &&
+    identity === sharedIdentity &&
+    compareAppearanceRevisions(revision, sharedRevision) < 0
+  ) {
+    return;
+  }
   if (
     generation !== undefined &&
     cachedAppearanceGeneration !== undefined &&
@@ -85,6 +145,7 @@ export function cacheAppearancePreference(
         cachedAppearancePreference,
         cachedAppearanceRevision,
         cachedAppearanceIdentity,
+        cachedAppearanceGeneration,
       );
     }
     return;
@@ -100,6 +161,7 @@ export function cacheAppearancePreference(
         cachedAppearancePreference,
         cachedAppearanceRevision,
         cachedAppearanceIdentity,
+        cachedAppearanceGeneration,
       );
     }
     return;
@@ -108,13 +170,14 @@ export function cacheAppearancePreference(
   cachedAppearanceRevision = revision;
   cachedAppearanceIdentity = identity;
   cachedAppearanceGeneration = generation ?? cachedAppearanceGeneration;
-  writeAppearanceCache(preference, revision, identity);
+  writeAppearanceCache(preference, revision, identity, generation);
 }
 
 function writeAppearanceCache(
   preference: AppearancePreference,
   revision?: string,
   identity?: string,
+  generation?: number,
 ): void {
   const secure = typeof window !== "undefined" && window.location.protocol === "https:";
   document.cookie = [
@@ -148,6 +211,17 @@ function writeAppearanceCache(
       .filter(Boolean)
       .join("; ");
   }
+  if (generation !== undefined) {
+    document.cookie = [
+      APPEARANCE_GENERATION_COOKIE + "=" + generation,
+      "path=/",
+      "max-age=" + APPEARANCE_COOKIE_MAX_AGE_SECONDS,
+      "samesite=lax",
+      secure ? "secure" : undefined,
+    ]
+      .filter(Boolean)
+      .join("; ");
+  }
 }
 
 export function clearAppearancePreferenceCache(): void {
@@ -157,6 +231,7 @@ export function clearAppearancePreferenceCache(): void {
   document.cookie = APPEARANCE_COOKIE + "=; path=/; max-age=0";
   document.cookie = APPEARANCE_REVISION_COOKIE + "=; path=/; max-age=0";
   document.cookie = APPEARANCE_IDENTITY_COOKIE + "=; path=/; max-age=0";
+  document.cookie = APPEARANCE_GENERATION_COOKIE + "=; path=/; max-age=0";
   cachedAppearanceIdentity = undefined;
 }
 
@@ -237,6 +312,16 @@ function readCookie(name: string): string | undefined {
 
 export function readAppearanceRevision(): string | undefined {
   return readCookie(APPEARANCE_REVISION_COOKIE);
+}
+
+export function readAppearanceIdentity(): string | undefined {
+  return readCookie(APPEARANCE_IDENTITY_COOKIE);
+}
+
+export function readAppearanceGeneration(): number | undefined {
+  const value = readCookie(APPEARANCE_GENERATION_COOKIE);
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  return Number(value);
 }
 
 export function applyAppearanceFromCookie(): ResolvedAppearance {

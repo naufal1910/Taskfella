@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { themeBootstrap } from "@/app/layout";
 import {
   APPEARANCE_CHANGE_EVENT,
+  cacheAppearancePreference,
   compareAppearanceRevisions,
   notifyAppearanceChange,
   readAppearancePreferenceFromCookie,
@@ -10,6 +11,48 @@ import {
 } from "@/components/theme/theme";
 
 describe("appearance resolution", () => {
+  function withCookieDocument(initialCookie: string, callback: () => void): void {
+    const previousDocument = globalThis.document;
+    const cookies = new Map(
+      initialCookie.split(";").map((part) => {
+        const separator = part.indexOf("=");
+        return [part.slice(0, separator).trim(), part.slice(separator + 1)] as const;
+      }),
+    );
+    const testDocument = {
+      get cookie(): string {
+        return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
+      },
+      set cookie(value: string) {
+        const [pair, ...attributes] = value.split(";");
+        const separator = pair.indexOf("=");
+        const name = pair.slice(0, separator).trim();
+        const cookieValue = pair.slice(separator + 1);
+        if (attributes.some((attribute) => attribute.trim() === "max-age=0")) {
+          cookies.delete(name);
+        } else {
+          cookies.set(name, cookieValue);
+        }
+      },
+    };
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: testDocument,
+    });
+    try {
+      callback();
+    } finally {
+      if (previousDocument === undefined) {
+        Reflect.deleteProperty(globalThis, "document");
+      } else {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          value: previousDocument,
+        });
+      }
+    }
+  }
+
   function runBootstrap(
     initialAppearance: {
       preference: "system" | "light" | "dark";
@@ -98,5 +141,19 @@ describe("appearance resolution", () => {
     expect(compareAppearanceRevisions("42", "41")).toBeGreaterThan(0);
     expect(compareAppearanceRevisions("41", "42")).toBeLessThan(0);
     expect(compareAppearanceRevisions("42", "42")).toBe(0);
+    expect(compareAppearanceRevisions("reset", "0")).toBeLessThan(0);
+    expect(compareAppearanceRevisions("0", "reset")).toBeGreaterThan(0);
+  });
+
+  it("does not let an older lifecycle response overwrite shared browser cache", () => {
+    withCookieDocument(
+      "taskfella_appearance=dark; taskfella_appearance_revision=1; taskfella_appearance_identity=account-a; taskfella_appearance_generation=9",
+      () => {
+        cacheAppearancePreference("light", "0", "account-a", 8);
+        expect(document.cookie).toContain("taskfella_appearance=dark");
+        expect(document.cookie).toContain("taskfella_appearance_revision=1");
+        expect(document.cookie).toContain("taskfella_appearance_generation=9");
+      },
+    );
   });
 });

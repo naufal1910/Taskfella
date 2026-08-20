@@ -21,9 +21,20 @@ describe("appearance mutation lifecycle", () => {
     tracker.recordSaved("dark");
     const pendingSave = tracker.advance();
     tracker.advance();
-    tracker.recordSaved("dark");
+    tracker.recordSaved("dark", pendingSave);
 
     expect(tracker.isCurrent(pendingSave)).toBe(false);
     expect(tracker.getSaved()).toBe("dark");
+    expect(tracker.hasUnsaved()).toBe(true);
+  });
+
+  it("clears unsaved state only for the current successful save", () => {
+    const tracker = createAppearanceMutationTracker<"light" | "dark">();
+    tracker.recordSaved("light");
+    const save = tracker.advance();
+
+    expect(tracker.hasUnsaved()).toBe(true);
+    tracker.recordSaved("dark", save);
+    expect(tracker.hasUnsaved()).toBe(false);
   });
 });

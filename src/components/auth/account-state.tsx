@@ -9,6 +9,7 @@ import {
   beginAppearanceLifecycle,
   cacheAppearancePreference,
   clearAppearancePreferenceCache,
+  isCurrentAppearanceLifecycle,
   notifyAppearanceChange,
   type AppearancePreference,
 } from "@/components/theme/theme";
@@ -189,10 +190,12 @@ export function AccountState() {
 
   useEffect(() => {
     let active = true;
+    const requestGeneration = beginAppearanceLifecycle();
     void fetch("/api/account", { credentials: "same-origin", cache: "no-store" })
       .then(async (response) => {
         if (!active) return;
         if (response.status === 401) {
+          if (!isCurrentAppearanceLifecycle(requestGeneration)) return;
           clearAppearancePreferenceCache();
           const generation = beginAppearanceLifecycle();
           notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
@@ -205,16 +208,18 @@ export function AccountState() {
         if (!response.ok) throw new Error("account");
         const payload = (await response.json()) as { account?: AccountPayload };
         if (!payload.account) throw new Error("account");
+        if (!isCurrentAppearanceLifecycle(requestGeneration)) return;
         setAccount(payload.account);
         cacheAppearancePreference(
           payload.account.appearance ?? "system",
           payload.account.appearanceRevision,
           payload.account.id,
+          requestGeneration,
         );
         notifyAppearanceChange(
           payload.account.appearance ?? "system",
           payload.account.appearanceRevision,
-          { authenticated: true, identity: payload.account.id },
+          { authenticated: true, generation: requestGeneration, identity: payload.account.id },
         );
       })
       .catch(() => {

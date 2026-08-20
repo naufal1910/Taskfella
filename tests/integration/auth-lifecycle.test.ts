@@ -151,6 +151,9 @@ integration("Phase 1B email/password route behavior", () => {
     expect(session).toBeTruthy();
     expect(loginResponse.headers.get("set-cookie")).toContain("HttpOnly");
     expect(loginResponse.headers.get("set-cookie")?.toLowerCase()).toContain("samesite=lax");
+    expect(loginResponse.headers.get("set-cookie")?.toLowerCase()).not.toContain(
+      "taskfella_appearance=",
+    );
 
     const current = await account(
       new Request("http://localhost:3000/api/account", {

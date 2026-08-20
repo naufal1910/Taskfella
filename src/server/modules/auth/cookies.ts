@@ -8,6 +8,7 @@ export const CSRF_COOKIE_NAME = "taskfella_csrf";
 export const APPEARANCE_COOKIE_NAME = "taskfella_appearance";
 export const APPEARANCE_REVISION_COOKIE_NAME = "taskfella_appearance_revision";
 export const APPEARANCE_IDENTITY_COOKIE_NAME = "taskfella_appearance_identity";
+export const APPEARANCE_GENERATION_COOKIE_NAME = "taskfella_appearance_generation";
 export const CSRF_HEADER_NAME = "x-csrf-token";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 export const CSRF_COOKIE_MAX_AGE_SECONDS = 24 * 60 * 60;
@@ -175,6 +176,11 @@ export function clearAppearanceCookie(response: NextResponse, environment?: AppE
     secure: appearanceCookieIsSecure(environment),
   });
   setCookie(response, APPEARANCE_IDENTITY_COOKIE_NAME, "", {
+    maxAge: 0,
+    httpOnly: false,
+    secure: appearanceCookieIsSecure(environment),
+  });
+  setCookie(response, APPEARANCE_GENERATION_COOKIE_NAME, "", {
     maxAge: 0,
     httpOnly: false,
     secure: appearanceCookieIsSecure(environment),

@@ -9,11 +9,7 @@ import {
 } from "@/server/http/auth-route";
 import { parseEmailPassword } from "@/server/modules/auth/input";
 import { getAccountWithVersion } from "@/server/modules/auth/accounts";
-import {
-  getSessionToken,
-  setAppearanceCookie,
-  setSessionCookie,
-} from "@/server/modules/auth/cookies";
+import { getSessionToken, setSessionCookie } from "@/server/modules/auth/cookies";
 import { authenticateAndIssueSession } from "@/server/modules/auth/lifecycle";
 import { AppError } from "@/server/http/errors";
 
@@ -60,13 +56,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       context,
     );
     setSessionCookie(response, result.token, result.expiresAt, context.environment);
-    setAppearanceCookie(
-      response,
-      appearanceAccount.appearance as "system" | "light" | "dark",
-      context.environment,
-      appearanceRevision,
-      appearanceAccount.id,
-    );
     return response;
   });
 }

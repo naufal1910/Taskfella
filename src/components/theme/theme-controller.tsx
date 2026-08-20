@@ -7,6 +7,8 @@ import {
   compareAppearanceRevisions,
   isAppearancePreference,
   readAppearanceCookie,
+  readAppearanceGeneration,
+  readAppearanceIdentity,
   readAppearanceRevision,
   type AppearancePreference,
 } from "./theme";
@@ -28,9 +30,9 @@ export function ThemeController({
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     let authoritativePreference = serverOwnsPreference ? initialPreference : undefined;
     let authoritativeRevision = serverOwnsPreference ? initialRevision : readAppearanceRevision();
-    let authoritativeIdentity = serverOwnsPreference ? initialIdentity : undefined;
-    let authoritativeGeneration: number | undefined;
-    let authenticationReset = false;
+    let authoritativeIdentity = serverOwnsPreference ? initialIdentity : readAppearanceIdentity();
+    let authoritativeGeneration = readAppearanceGeneration();
+    let authenticationReset = serverOwnsPreference && !initialIdentity;
     const applyCurrent = () => {
       const preference = authoritativePreference ?? readAppearanceCookie();
       applyAppearance(preference, media.matches);
@@ -53,6 +55,25 @@ export function ThemeController({
         const identity = typeof detail.identity === "string" ? detail.identity : undefined;
         const reset = detail.reset === true;
         const authenticated = detail.authenticated === true;
+        const sharedGeneration = readAppearanceGeneration();
+        const sharedRevision = readAppearanceRevision();
+        const sharedIdentity = readAppearanceIdentity();
+        if (
+          generation !== undefined &&
+          sharedGeneration !== undefined &&
+          generation < sharedGeneration
+        ) {
+          return;
+        }
+        if (
+          authenticated &&
+          revision &&
+          sharedRevision &&
+          identity === sharedIdentity &&
+          compareAppearanceRevisions(revision, sharedRevision) < 0
+        ) {
+          return;
+        }
         if (
           generation !== undefined &&
           authoritativeGeneration !== undefined &&
@@ -62,10 +83,28 @@ export function ThemeController({
         }
         if (
           authenticated &&
+          (authenticationReset || authoritativeGeneration !== undefined) &&
+          generation === undefined
+        ) {
+          return;
+        }
+        if (
+          authenticated &&
+          authenticationReset &&
+          authoritativeGeneration !== undefined &&
+          generation !== undefined &&
+          generation <= authoritativeGeneration
+        ) {
+          return;
+        }
+        if (
+          authenticated &&
           identity &&
           authoritativeIdentity &&
           identity !== authoritativeIdentity &&
-          generation === undefined
+          (generation === undefined ||
+            authoritativeGeneration === undefined ||
+            generation <= authoritativeGeneration)
         ) {
           return;
         }
