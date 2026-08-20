@@ -1,9 +1,19 @@
 "use client";
 
 import { useEffect } from "react";
-import { APPEARANCE_CHANGE_EVENT, applyAppearance, readAppearanceCookie } from "./theme";
+import {
+  APPEARANCE_CHANGE_EVENT,
+  applyAppearance,
+  readAppearanceCookie,
+  type AppearancePreference,
+} from "./theme";
 
-export function ThemeController() {
+interface ThemeControllerProps {
+  initialPreference: AppearancePreference;
+  serverOwnsPreference: boolean;
+}
+
+export function ThemeController({ initialPreference, serverOwnsPreference }: ThemeControllerProps) {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const update = () => {
@@ -11,14 +21,17 @@ export function ThemeController() {
       applyAppearance(preference, media.matches);
     };
 
-    update();
+    applyAppearance(
+      serverOwnsPreference ? initialPreference : readAppearanceCookie(),
+      media.matches,
+    );
     media.addEventListener("change", update);
     window.addEventListener(APPEARANCE_CHANGE_EVENT, update);
     return () => {
       media.removeEventListener("change", update);
       window.removeEventListener(APPEARANCE_CHANGE_EVENT, update);
     };
-  }, []);
+  }, [initialPreference, serverOwnsPreference]);
 
   return null;
 }

@@ -68,10 +68,15 @@ export function accountPayload(
   };
 }
 
-async function accountResponse(account: typeof accounts.$inferSelect): Promise<NextResponse> {
+async function accountResponse(
+  account: typeof accounts.$inferSelect,
+  options: { syncAppearanceCookie?: boolean } = {},
+): Promise<NextResponse> {
   const identities = await listAccountOAuthIdentities(getDatabase(), account.id);
   const response = noStoreResponse({ ok: true, account: accountPayload(account, identities) });
-  setAppearanceCookie(response, account.appearance as "system" | "light" | "dark");
+  if (options.syncAppearanceCookie !== false) {
+    setAppearanceCookie(response, account.appearance as "system" | "light" | "dark");
+  }
   return response;
 }
 
@@ -94,7 +99,9 @@ async function update(request: Request): Promise<NextResponse> {
         throw new Error("Account settings could not be saved.");
       }
 
-      return accountResponse(updated);
+      return accountResponse(updated, {
+        syncAppearanceCookie: Object.prototype.hasOwnProperty.call(patch, "appearance"),
+      });
     },
     { mutation: true },
   );

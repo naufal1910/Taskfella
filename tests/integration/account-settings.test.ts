@@ -181,6 +181,7 @@ integration("Phase 1D account settings routes", () => {
     const invalidValues = [
       { timezone: "Not/AZone" },
       { timezone: "" },
+      { timezone: "+05:30" },
       { focusDurationMinutes: 0 },
       { focusDurationMinutes: 121 },
       { shortBreakDurationMinutes: 0 },
@@ -235,6 +236,8 @@ integration("Phase 1D account settings routes", () => {
     ]);
     expect(nameResponse.status).toBe(200);
     expect(timezoneResponse.status).toBe(200);
+    expect(nameResponse.headers.get("set-cookie")).toBeNull();
+    expect(timezoneResponse.headers.get("set-cookie")).toBeNull();
 
     const [stored] = await db.select().from(accounts).where(eq(accounts.id, owner.id));
     expect(stored).toMatchObject({ displayName: "Concurrent owner", timezone: "Europe/Berlin" });

@@ -1,4 +1,5 @@
 export const APPEARANCE_COOKIE = "taskfella_appearance";
+const APPEARANCE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 export const APPEARANCE_CHANGE_EVENT = "taskfella:appearance-change";
 export const APPEARANCE_PREFERENCES = ["system", "light", "dark"] as const;
 export type AppearancePreference = (typeof APPEARANCE_PREFERENCES)[number];
@@ -8,6 +9,20 @@ export function notifyAppearanceChange(): void {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(APPEARANCE_CHANGE_EVENT));
   }
+}
+
+export function cacheAppearancePreference(preference: AppearancePreference): void {
+  if (typeof document === "undefined") return;
+  const secure = typeof window !== "undefined" && window.location.protocol === "https:";
+  document.cookie = [
+    `${APPEARANCE_COOKIE}=${encodeURIComponent(preference)}`,
+    "path=/",
+    `max-age=${APPEARANCE_COOKIE_MAX_AGE_SECONDS}`,
+    "samesite=lax",
+    secure ? "secure" : undefined,
+  ]
+    .filter(Boolean)
+    .join("; ");
 }
 
 export function resolveAppearance(

@@ -20,10 +20,12 @@ function invalid(input: Record<string, unknown>): AppError {
 }
 
 describe("account settings validation", () => {
-  it("uses safe defaults and accepts an Intl timezone", () => {
+  it("uses safe defaults and accepts named IANA timezones", () => {
     expect(settingsFromAccountInput({})).toEqual(DEFAULT_ACCOUNT_SETTINGS);
     expect(isValidTimezone("America/New_York")).toBe(true);
     expect(isValidTimezone("not/a-real-timezone")).toBe(false);
+    expect(isValidTimezone("+05:30")).toBe(false);
+    expect(isValidTimezone("UTC")).toBe(true);
   });
 
   it("keeps the browser-provided signup timezone as the initial account value", () => {

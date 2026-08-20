@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  cacheAppearancePreference,
   detectBrowserTimezone,
   notifyAppearanceChange,
   type AppearancePreference,
@@ -234,6 +235,8 @@ export function SettingsPanel() {
     typeof window === "undefined" ? undefined : detectBrowserTimezone(),
   );
   const [pendingSections, setPendingSections] = useState<ReadonlySet<Section>>(() => new Set());
+  const appearanceMutationRef = useRef(0);
+  const appliedAppearanceRef = useRef<AppearancePreference | undefined>(undefined);
   const [status, setStatus] = useState<string>();
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -263,6 +266,7 @@ export function SettingsPanel() {
         if (!payload.account) throw new Error("account");
         setAccount(payload.account);
         setValues(valuesFromAccount(payload.account));
+        appliedAppearanceRef.current = payload.account.appearance ?? "system";
         notifyAppearanceChange();
       })
       .catch(() => {
@@ -284,6 +288,10 @@ export function SettingsPanel() {
   }
 
   async function save(section: Section, patch: Record<string, unknown>): Promise<void> {
+    const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
+    const appearanceMutationId = appearancePatch
+      ? ++appearanceMutationRef.current
+      : appearanceMutationRef.current;
     setSectionPending(section, true);
     setStatus(undefined);
     setError(undefined);
@@ -326,7 +334,14 @@ export function SettingsPanel() {
         return next;
       });
       setStatus("Saved.");
-      notifyAppearanceChange();
+      if (appearancePatch) {
+        const preference = payload.account.appearance ?? "system";
+        if (appearanceMutationId === appearanceMutationRef.current) {
+          appliedAppearanceRef.current = preference;
+        }
+        cacheAppearancePreference(appliedAppearanceRef.current ?? preference);
+        notifyAppearanceChange();
+      }
     } catch (caught) {
       setError(
         caught instanceof Error && caught.message === "validation"

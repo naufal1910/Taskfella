@@ -28,6 +28,7 @@ export type AccountSettings = typeof DEFAULT_ACCOUNT_SETTINGS;
 export type AccountSettingsPatch = Partial<AccountSettings>;
 
 const controlCharacterPattern = /[\u0000-\u001f\u007f]/;
+const namedIanaTimezones = new Set(Intl.supportedValuesOf("timeZone"));
 const displayNameSchema = z.string().max(80);
 const timezoneSchema = z.string().min(1).max(128);
 const appearanceSchema = z.enum(APPEARANCE_VALUES);
@@ -91,11 +92,6 @@ function chooseValue<T>(values: Array<T | undefined>): T | undefined {
   return first;
 }
 
-/**
- * Validate an account timezone using the runtime's IANA/Intl timezone database.
- * This accepts canonical names and runtime-supported aliases such as UTC, but
- * never trusts a timezone merely because it has the right shape.
- */
 export function isValidTimezone(value: string): boolean {
   if (
     value.length === 0 ||
@@ -105,6 +101,8 @@ export function isValidTimezone(value: string): boolean {
   ) {
     return false;
   }
+
+  if (value !== "UTC" && !namedIanaTimezones.has(value)) return false;
 
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
