@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => "/login",
 }));
 
 import { AccountState } from "@/components/auth/account-state";
@@ -92,6 +93,7 @@ describe("authentication lifecycle UI", () => {
     expect(logout).toContain("Sign out of Taskfella");
     expect(logout).toContain('class="ui-button ui-button--primary auth-submit"');
     expect(page).toContain('class="auth-identity"');
+    expect(page).toContain('class="auth-main" tabindex="-1"');
     expect(page).toContain("Private, focused personal work");
   });
 
@@ -110,6 +112,6 @@ describe("authentication lifecycle UI", () => {
     expect(success).toContain('tabindex="-1"');
     expect(pending).toContain('role="status"');
     expect(pending).toContain('aria-live="polite"');
-    expect(pending).toContain('aria-busy="true"');
+    expect(pending).not.toContain('aria-busy="true"');
   });
 });

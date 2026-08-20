@@ -9,7 +9,6 @@ export function PendingFeedback({ message }: PendingFeedbackProps) {
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      aria-busy="true"
     >
       <strong>In progress</strong>
       <p>{message}</p>

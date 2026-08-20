@@ -1,8 +1,18 @@
+"use client";
+
 import Link from "next/link";
-import { type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, type ReactNode } from "react";
 import { BrandMark } from "@/components/ui/primitives";
 
 export function AuthPage({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    mainRef.current?.focus();
+  }, [pathname]);
+
   return (
     <div className="auth-frame">
       <header className="auth-header">
@@ -19,7 +29,7 @@ export function AuthPage({ children }: { children: ReactNode }) {
           </Link>
         </nav>
       </header>
-      <main className="auth-main">
+      <main ref={mainRef} className="auth-main" tabIndex={-1}>
         <div className="auth-content">
           <div className="auth-identity" aria-hidden="true">
             <BrandMark className="auth-identity__mark" />

@@ -137,7 +137,6 @@ function AuthFeedback({
       role={error ? "alert" : "status"}
       aria-live={error ? "assertive" : "polite"}
       aria-atomic="true"
-      aria-busy={pending || undefined}
     >
       <strong>{label}</strong>
       <p>{message}</p>
