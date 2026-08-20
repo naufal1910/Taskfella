@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, gt, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import { type Database } from "@/server/db/client";
 import { authRateLimits } from "@/server/db/schema";
 import { AppError } from "@/server/http/errors";
@@ -81,64 +81,48 @@ export async function consumeRateLimit(
   const windowEnd = new Date(now.getTime() + policy.windowMs);
 
   return db.transaction(async (tx) => {
-    const [current] = await tx
+    const [consumed] = await tx
       .insert(authRateLimits)
       .values({
         keyHash,
-        attempts: 0,
+        attempts: 1,
         windowStartedAt: now,
         expiresAt: windowEnd,
         updatedAt: now,
       })
       .onConflictDoUpdate({
         target: authRateLimits.keyHash,
-        set: { keyHash: sql`${authRateLimits.keyHash}` },
+        set: {
+          attempts: sql`
+            CASE
+              WHEN ${authRateLimits.expiresAt} <= ${now} THEN 1
+              ELSE ${authRateLimits.attempts} + 1
+            END
+          `,
+          windowStartedAt: sql`
+            CASE
+              WHEN ${authRateLimits.expiresAt} <= ${now} THEN ${now}
+              ELSE ${authRateLimits.windowStartedAt}
+            END
+          `,
+          expiresAt: sql`
+            CASE
+              WHEN ${authRateLimits.expiresAt} <= ${now} THEN ${windowEnd}
+              ELSE ${authRateLimits.expiresAt}
+            END
+          `,
+          updatedAt: now,
+        },
+        setWhere: sql`
+          ${authRateLimits.expiresAt} <= ${now}
+          OR ${authRateLimits.attempts} < ${policy.maxAttempts}
+        `,
       })
-      .returning();
-
-    if (!current) {
-      throw new Error("Rate-limit state could not be read.");
-    }
-
-    const [reset] = await tx
-      .update(authRateLimits)
-      .set({
-        attempts: 1,
-        windowStartedAt: now,
-        expiresAt: windowEnd,
-        updatedAt: now,
-      })
-      .where(and(eq(authRateLimits.keyHash, keyHash), lte(authRateLimits.expiresAt, now)))
-      .returning();
-
-    if (reset) {
-      // Refresh the requested bucket before pruning so concurrent callers
-      // cannot prune the row they are about to consume.
-      await pruneExpiredRateLimits(tx, now);
-      return {
-        allowed: true,
-        limit: policy.maxAttempts,
-        remaining: policy.maxAttempts - 1,
-        retryAfterSeconds: Math.ceil(policy.windowMs / 1000),
-      };
-    }
-
-    const [consumed] = await tx
-      .update(authRateLimits)
-      .set({
-        attempts: sql`${authRateLimits.attempts} + 1`,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(authRateLimits.keyHash, keyHash),
-          gt(authRateLimits.expiresAt, now),
-          lte(authRateLimits.attempts, policy.maxAttempts - 1),
-        ),
-      )
       .returning();
 
     if (consumed) {
+      // The upsert locks the bucket and refreshes it before pruning, so a
+      // concurrent consumer cannot prune the row it is about to consume.
       await pruneExpiredRateLimits(tx, now);
       return {
         allowed: true,
@@ -151,6 +135,9 @@ export async function consumeRateLimit(
       };
     }
 
+    // A false conflict predicate means the bucket is already full. Lock and
+    // read it before returning the denial so the decision remains serialized
+    // with consumers that are completing the same bucket transition.
     const [latest] = await tx
       .select()
       .from(authRateLimits)
@@ -160,8 +147,6 @@ export async function consumeRateLimit(
     if (!latest) {
       throw new Error("Rate-limit state could not be read.");
     }
-
-    await pruneExpiredRateLimits(tx, now);
 
     if (latest.attempts >= policy.maxAttempts) {
       return {
