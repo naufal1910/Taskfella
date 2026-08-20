@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   type AnyPgColumn,
@@ -23,6 +24,15 @@ export const accounts = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     email: text("email").notNull(),
     normalizedEmail: text("normalized_email").notNull(),
+    displayName: text("display_name").notNull().default(""),
+    timezone: text("timezone").notNull().default("UTC"),
+    appearance: text("appearance").notNull().default("system"),
+    notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
+    soundEnabled: boolean("sound_enabled").notNull().default(true),
+    focusDurationMinutes: integer("focus_duration_minutes").notNull().default(25),
+    shortBreakDurationMinutes: integer("short_break_duration_minutes").notNull().default(5),
+    longBreakDurationMinutes: integer("long_break_duration_minutes").notNull().default(15),
+    longBreakInterval: integer("long_break_interval").notNull().default(4),
     emailVerifiedAt: utcTimestamp("email_verified_at"),
     createdAt: utcTimestamp("created_at").defaultNow().notNull(),
     updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
@@ -33,6 +43,24 @@ export const accounts = pgTable(
       "accounts_normalized_email_lowercase_check",
       sql`${table.normalizedEmail} = lower(${table.normalizedEmail})`,
     ),
+    check("accounts_display_name_length_check", sql`length(${table.displayName}) <= 80`),
+    check(
+      "accounts_appearance_value_check",
+      sql`${table.appearance} IN ('system', 'light', 'dark')`,
+    ),
+    check(
+      "accounts_focus_duration_minutes_check",
+      sql`${table.focusDurationMinutes} BETWEEN 1 AND 120`,
+    ),
+    check(
+      "accounts_short_break_duration_minutes_check",
+      sql`${table.shortBreakDurationMinutes} BETWEEN 1 AND 60`,
+    ),
+    check(
+      "accounts_long_break_duration_minutes_check",
+      sql`${table.longBreakDurationMinutes} BETWEEN 1 AND 120`,
+    ),
+    check("accounts_long_break_interval_check", sql`${table.longBreakInterval} BETWEEN 1 AND 12`),
   ],
 );
 

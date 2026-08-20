@@ -8,7 +8,11 @@ import {
   requireAuthCsrf,
 } from "@/server/http/auth-route";
 import { parseEmailPassword } from "@/server/modules/auth/input";
-import { getSessionToken, setSessionCookie } from "@/server/modules/auth/cookies";
+import {
+  getSessionToken,
+  setAppearanceCookie,
+  setSessionCookie,
+} from "@/server/modules/auth/cookies";
 import { authenticateAndIssueSession } from "@/server/modules/auth/lifecycle";
 import { AppError } from "@/server/http/errors";
 
@@ -41,12 +45,18 @@ export async function POST(request: Request): Promise<NextResponse> {
           id: result.account.id,
           email: result.account.email,
           emailVerifiedAt: result.account.emailVerifiedAt,
+          appearance: result.account.appearance,
         },
       },
       200,
       context,
     );
     setSessionCookie(response, result.token, result.expiresAt, context.environment);
+    setAppearanceCookie(
+      response,
+      result.account.appearance as "system" | "light" | "dark",
+      context.environment,
+    );
     return response;
   });
 }

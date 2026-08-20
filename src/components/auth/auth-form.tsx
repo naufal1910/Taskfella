@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
+import { detectBrowserTimezone } from "@/components/theme/theme";
 import {
   type AuthFieldErrors,
   type AuthFormMode,
@@ -414,14 +415,17 @@ export function AuthForm({ mode, token }: AuthFormProps) {
                   ? "/api/auth/resend-verification"
                   : "/api/auth/verify-email";
 
+      const browserTimezone = mode === "signup" ? detectBrowserTimezone() : undefined;
       const body =
         mode === "verify"
           ? { token }
           : mode === "reset"
             ? { token, password }
-            : mode === "signup" || mode === "login"
-              ? { email, password }
-              : { email };
+            : mode === "signup"
+              ? { email, password, ...(browserTimezone ? { timezone: browserTimezone } : {}) }
+              : mode === "login"
+                ? { email, password }
+                : { email };
 
       try {
         const csrf = await getCsrfToken();

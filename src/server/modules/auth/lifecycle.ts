@@ -18,6 +18,7 @@ import {
 import { hashPassword, validatePasswordInput, verifyPasswordWithFallback } from "./password";
 import { lockEmailOwnership, normalizeEmail, validateEmail } from "./accounts";
 import { SESSION_TTL_MS } from "./sessions";
+import { settingsFromAccountInput } from "@/server/modules/account/settings";
 
 export type OneTimeTokenState = "valid" | "invalid" | "expired" | "already-used" | "superseded";
 
@@ -73,10 +74,11 @@ function hashTokenOrNull(token: string): string | null {
 
 export async function createAccountWithPasswordAndVerification(
   db: Database,
-  input: { email: string; password: string; now?: Date },
+  input: { email: string; password: string; timezone?: string; now?: Date },
 ): Promise<SignupResult> {
   const normalizedEmail = validateEmail(input.email);
   validatePasswordInput(input.password);
+  const settings = settingsFromAccountInput({ timezone: input.timezone });
   const passwordHash = await hashPassword(input.password);
   const now = input.now ?? new Date();
   const verificationToken = generateOpaqueToken();
@@ -89,6 +91,15 @@ export async function createAccountWithPasswordAndVerification(
       .values({
         email: input.email.trim(),
         normalizedEmail,
+        displayName: settings.displayName,
+        timezone: settings.timezone,
+        appearance: settings.appearance,
+        notificationsEnabled: settings.notificationsEnabled,
+        soundEnabled: settings.soundEnabled,
+        focusDurationMinutes: settings.focusDurationMinutes,
+        shortBreakDurationMinutes: settings.shortBreakDurationMinutes,
+        longBreakDurationMinutes: settings.longBreakDurationMinutes,
+        longBreakInterval: settings.longBreakInterval,
         createdAt: now,
         updatedAt: now,
       })

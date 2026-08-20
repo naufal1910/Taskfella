@@ -8,7 +8,7 @@ import {
   requireAuthCsrf,
   tokenStateError,
 } from "@/server/http/auth-route";
-import { clearSessionCookie } from "@/server/modules/auth/cookies";
+import { clearAppearanceCookie, clearSessionCookie } from "@/server/modules/auth/cookies";
 import { parsePasswordReset } from "@/server/modules/auth/input";
 import { resetPasswordWithToken } from "@/server/modules/auth/lifecycle";
 
@@ -34,6 +34,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         context,
       );
       clearSessionCookie(response, context.environment);
+      clearAppearanceCookie(response, context.environment);
       return response;
     }
 

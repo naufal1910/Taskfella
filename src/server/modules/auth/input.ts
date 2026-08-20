@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AppError } from "@/server/http/errors";
 import { validateEmail } from "./accounts";
+import { isValidTimezone } from "@/server/modules/account/settings";
 import { validatePasswordInput } from "./password";
 
 const emailSchema = z.string().min(1).max(1024);
@@ -44,6 +45,21 @@ export function parseEmailPassword(input: Record<string, unknown>): {
   password: string;
 } {
   return { email: parseEmail(input.email), password: parsePassword(input.password) };
+}
+
+export function parseSignupInput(input: Record<string, unknown>): {
+  email: string;
+  password: string;
+  timezone?: string;
+} {
+  const credentials = parseEmailPassword(input);
+  if (input.timezone === undefined) {
+    return credentials;
+  }
+  if (typeof input.timezone !== "string" || !isValidTimezone(input.timezone)) {
+    return invalid();
+  }
+  return { ...credentials, timezone: input.timezone };
 }
 
 export function parseToken(input: unknown): string {

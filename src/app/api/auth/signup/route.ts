@@ -10,7 +10,7 @@ import {
 } from "@/server/http/auth-route";
 import { isUniqueConstraintViolation } from "@/server/modules/auth/accounts";
 import { createAccountWithPasswordAndVerification } from "@/server/modules/auth/lifecycle";
-import { parseEmailPassword } from "@/server/modules/auth/input";
+import { parseSignupInput } from "@/server/modules/auth/input";
 import {
   createApplicationLink,
   createEmailSender,
@@ -27,7 +27,7 @@ const SIGNUP_MESSAGE =
 export async function POST(request: Request): Promise<NextResponse> {
   return authRoute(request, async (context) => {
     requireAuthCsrf(request, context);
-    const input = parseEmailPassword(await parseJsonObject(request));
+    const input = parseSignupInput(await parseJsonObject(request));
     const db = databaseFor(context);
 
     await enforceAuthRateLimits(request, db, "signup", input.email);

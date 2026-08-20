@@ -2,7 +2,7 @@
 
 Taskfella is an open-source, personal-first, board-first workspace for focused execution. It will bring Kanban planning, Pomodoro focus, manual time tracking, and personal analytics into one calm daily workflow.
 
-This repository currently contains **Phase 0 plus Phase 1A, Phase 1B, and Phase 1C: the application, authentication foundation, email/password lifecycle, and Google OAuth with explicit identity linking**. Boards, tasks, timers, analytics, and exports remain later-phase behavior.
+This repository currently contains **Phase 0 plus Phase 1A, Phase 1B, Phase 1C, and Phase 1D: the application, authentication foundation, email/password lifecycle, Google OAuth with explicit identity linking, and account settings/appearance behavior**. Boards, tasks, timers, analytics, and exports remain later-phase behavior.
 
 ## Quick start
 
@@ -89,6 +89,8 @@ The contributor-facing validator command and zero-error/zero-warning requirement
 - [Calm Execution UI foundation issue](https://github.com/naufal1910/Taskfella/issues/19)
 - [Phase 1B issue](https://github.com/naufal1910/Taskfella/issues/14)
 - [Phase 1C issue](https://github.com/naufal1910/Taskfella/issues/15)
+- [Phase 1D account settings issue](https://github.com/naufal1910/Taskfella/issues/16)
+- [Phase 1D account settings implementation notes](docs/implementation/taskfella-phase1d-settings.md)
 
 ## License
 

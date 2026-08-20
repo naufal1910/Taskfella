@@ -1,12 +1,15 @@
 import { randomBytes } from "node:crypto";
 import type { NextResponse } from "next/server";
 import { type AppEnv, getEnvironment } from "@/server/config/env";
+import { APPEARANCE_VALUES, type Appearance } from "@/server/modules/account/settings";
 
 export const SESSION_COOKIE_NAME = "taskfella_session";
 export const CSRF_COOKIE_NAME = "taskfella_csrf";
+export const APPEARANCE_COOKIE_NAME = "taskfella_appearance";
 export const CSRF_HEADER_NAME = "x-csrf-token";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 export const CSRF_COOKIE_MAX_AGE_SECONDS = 24 * 60 * 60;
+export const APPEARANCE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 export const OAUTH_STATE_COOKIE_NAME = "taskfella_oauth_state";
 export const OAUTH_VERIFIER_COOKIE_NAME = "taskfella_oauth_verifier";
 export const OAUTH_COOKIE_MAX_AGE_SECONDS = 10 * 60;
@@ -48,12 +51,20 @@ export function getCsrfCookie(request: Request): string | undefined {
   return readCookie(request, CSRF_COOKIE_NAME);
 }
 
+export function getAppearanceCookie(request: Request): Appearance | undefined {
+  const value = readCookie(request, APPEARANCE_COOKIE_NAME);
+  return value && APPEARANCE_VALUES.includes(value as Appearance)
+    ? (value as Appearance)
+    : undefined;
+}
+
 export function getOAuthStateCookie(request: Request): string | undefined {
   return readCookie(request, OAUTH_STATE_COOKIE_NAME);
 }
 
 export function getOAuthCodeVerifierCookie(request: Request): string | undefined {
   return readCookie(request, OAUTH_VERIFIER_COOKIE_NAME);
+}
 }
 
 function isProduction(environment: AppEnv): boolean {
@@ -111,6 +122,31 @@ export function clearSessionCookie(
     maxAge: 0,
     httpOnly: true,
     secure: isProduction(environment),
+  });
+}
+
+/** A non-sensitive cache of the account preference used for pre-paint theme selection. */
+function appearanceCookieIsSecure(environment?: AppEnv): boolean {
+  return environment ? isProduction(environment) : process.env.NODE_ENV === "production";
+}
+
+export function setAppearanceCookie(
+  response: NextResponse,
+  appearance: Appearance,
+  environment?: AppEnv,
+): void {
+  setCookie(response, APPEARANCE_COOKIE_NAME, appearance, {
+    maxAge: APPEARANCE_COOKIE_MAX_AGE_SECONDS,
+    httpOnly: false,
+    secure: appearanceCookieIsSecure(environment),
+  });
+}
+
+export function clearAppearanceCookie(response: NextResponse, environment?: AppEnv): void {
+  setCookie(response, APPEARANCE_COOKIE_NAME, "", {
+    maxAge: 0,
+    httpOnly: false,
+    secure: appearanceCookieIsSecure(environment),
   });
 }
 
