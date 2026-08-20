@@ -68,7 +68,7 @@ docker run --rm -p 3000:3000 \
   taskfella:local
 ```
 
-Run `pnpm db:migrate` as a deployment step against the target database before starting the application container. The image starts the Next.js standalone server and does not contain development credentials.
+Run `pnpm db:migrate` as a deployment step against the target database before starting the application container. The image starts the Next.js standalone server and does not contain development credentials. Replace the example Google values with a real Web application client before starting; the shown values are intentionally placeholders and production validation rejects them.
 
 ## Project documents
 
@@ -88,6 +88,7 @@ The contributor-facing validator command and zero-error/zero-warning requirement
 - [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13)
 - [Calm Execution UI foundation issue](https://github.com/naufal1910/Taskfella/issues/19)
 - [Phase 1B issue](https://github.com/naufal1910/Taskfella/issues/14)
+- [Phase 1C issue](https://github.com/naufal1910/Taskfella/issues/15)
 
 ## License
 

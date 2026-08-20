@@ -28,7 +28,7 @@ The callback uses the origin from `APP_URL`; do not add a client-supplied redire
 - `POST /api/auth/google?intent=link` starts an explicit link from the currently authenticated account after the existing CSRF boundary; the account page obtains the provider URL through the JSON response.
 - `GET /api/auth/google/callback` validates the ceremony and completes it.
 
-Each ceremony creates a short-lived, one-time database transaction. The state and PKCE verifier are held in Secure-in-production, HttpOnly, SameSite=Lax cookies; only SHA-256 digests are persisted. Google receives `openid email` and an S256 PKCE challenge. The token exchange requests no refresh token. The provider boundary retains only the verified Google subject and verified email in process memory.
+Each ceremony creates a short-lived, one-time database record. The state and PKCE verifier are held in Secure-in-production, HttpOnly, SameSite=Lax cookies; only SHA-256 digests are persisted. Google receives `openid email` and an S256 PKCE challenge. The token exchange requests no refresh token. The provider boundary returns only the verified Google subject and email; authorization codes and access/refresh tokens are not persisted, logged, or exposed.
 
 Callback state is consumed under a PostgreSQL row lock before provider work. Missing, mismatched, expired, reused, or concurrent callbacks cannot issue a session. Provider cancellation and provider failures clear ceremony cookies and redirect to a safe fixed local route with a generic status. Redirect targets are never accepted from query input.
 
@@ -42,7 +42,7 @@ Callback state is consumed under a PostgreSQL row lock before provider work. Mis
 - Email conflicts and identity conflicts leave the current account and session unchanged. Already-linked linking rotates the current session safely.
 - The account API exposes only provider labels and link timestamps. Provider subjects, email responses beyond the app-owned account email, authorization codes, access tokens, refresh tokens, and raw session values are not exposed.
 
-All callback responses use `cache-control: no-store` and `referrer-policy: no-referrer`. Session cookies remain HttpOnly, SameSite=Lax, and Secure in production. The existing CSRF and protected-route boundaries remain authoritative for app mutations.
+Callback redirects use `cache-control: no-store` and `referrer-policy: no-referrer`; shared auth-route responses are also marked `no-store`. Session cookies remain HttpOnly, SameSite=Lax, and Secure in production. The existing CSRF and protected-route boundaries remain authoritative for app mutations.
 
 ## Verification
 

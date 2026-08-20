@@ -174,7 +174,7 @@ export async function completeGoogleIdentity(
   const provider = input.transaction.provider;
   const subject = input.profile.subject;
 
-  const transaction = db.transaction(async (tx) => {
+  const transaction = db.transaction(async (tx): Promise<GoogleIdentityResult> => {
     if (input.transaction.intent === "link") {
       if (!input.transaction.accountId || !input.transaction.sessionId) {
         return { state: "session-invalid" };
