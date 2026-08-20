@@ -112,6 +112,14 @@ async function update(request: Request): Promise<NextResponse> {
         const patch = parseAccountSettingsPatch(await parseJsonObject(request));
         const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
         const database = getDatabase();
+        if (
+          request.method === "PUT" &&
+          appearancePatch &&
+          Object.keys(patch).length === 1 &&
+          patch.appearance === account.appearance
+        ) {
+          return accountResponse(account, accountVersion);
+        }
         let updated: typeof accounts.$inferSelect | undefined;
         let appearanceRevision: string | undefined;
         if (appearancePatch) {

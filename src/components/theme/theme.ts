@@ -20,6 +20,7 @@ export function beginAppearanceLifecycle(): number {
   const sharedGeneration = readAppearanceGeneration();
   appearanceLifecycleGeneration =
     Math.max(appearanceLifecycleGeneration, sharedGeneration ?? 0) + 1;
+  writeAppearanceGeneration(appearanceLifecycleGeneration);
   return appearanceLifecycleGeneration;
 }
 
@@ -231,7 +232,6 @@ export function clearAppearancePreferenceCache(): void {
   document.cookie = APPEARANCE_COOKIE + "=; path=/; max-age=0";
   document.cookie = APPEARANCE_REVISION_COOKIE + "=; path=/; max-age=0";
   document.cookie = APPEARANCE_IDENTITY_COOKIE + "=; path=/; max-age=0";
-  document.cookie = APPEARANCE_GENERATION_COOKIE + "=; path=/; max-age=0";
   cachedAppearanceIdentity = undefined;
 }
 
@@ -322,6 +322,20 @@ export function readAppearanceGeneration(): number | undefined {
   const value = readCookie(APPEARANCE_GENERATION_COOKIE);
   if (!value || !/^\d+$/.test(value)) return undefined;
   return Number(value);
+}
+
+function writeAppearanceGeneration(generation: number): void {
+  if (typeof document === "undefined") return;
+  const secure = typeof window !== "undefined" && window.location.protocol === "https:";
+  document.cookie = [
+    APPEARANCE_GENERATION_COOKIE + "=" + generation,
+    "path=/",
+    "max-age=" + APPEARANCE_COOKIE_MAX_AGE_SECONDS,
+    "samesite=lax",
+    secure ? "secure" : undefined,
+  ]
+    .filter(Boolean)
+    .join("; ");
 }
 
 export function applyAppearanceFromCookie(): ResolvedAppearance {

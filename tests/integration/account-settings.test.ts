@@ -67,7 +67,8 @@ integration("Phase 1D account settings routes", () => {
     expect(initial.status).toBe(200);
     expect(initial.headers.get("cache-control")).toBe("no-store");
     expect(initial.headers.get("set-cookie")).toBeNull();
-    expect(await json(initial)).toMatchObject({
+    const initialBody = await json(initial);
+    expect(initialBody).toMatchObject({
       account: {
         email: owner.email,
         displayName: "",
@@ -80,6 +81,23 @@ integration("Phase 1D account settings routes", () => {
         shortBreakDurationMinutes: 5,
         longBreakDurationMinutes: 15,
         longBreakInterval: 4,
+      },
+    });
+
+    const unchangedPut = await updateAccount(
+      authenticatedRequest("/api/account", session.token, {
+        method: "PUT",
+        body: { appearance: "system" },
+      }),
+    );
+    expect(unchangedPut.status).toBe(200);
+    expect(unchangedPut.headers.get("cache-control")).toBe("no-store");
+    expect(unchangedPut.headers.get("set-cookie")).toBeNull();
+    expect(await json(unchangedPut)).toMatchObject({
+      account: {
+        appearance: "system",
+        appearanceRevision: initialBody.account.appearanceRevision,
+        updatedAt: initialBody.account.updatedAt,
       },
     });
 

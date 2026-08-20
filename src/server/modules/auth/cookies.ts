@@ -180,11 +180,6 @@ export function clearAppearanceCookie(response: NextResponse, environment?: AppE
     httpOnly: false,
     secure: appearanceCookieIsSecure(environment),
   });
-  setCookie(response, APPEARANCE_GENERATION_COOKIE_NAME, "", {
-    maxAge: 0,
-    httpOnly: false,
-    secure: appearanceCookieIsSecure(environment),
-  });
 }
 
 export function createCsrfToken(): string {

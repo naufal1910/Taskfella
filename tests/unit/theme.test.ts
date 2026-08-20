@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { themeBootstrap } from "@/app/layout";
 import {
   APPEARANCE_CHANGE_EVENT,
+  beginAppearanceLifecycle,
   cacheAppearancePreference,
+  clearAppearancePreferenceCache,
   compareAppearanceRevisions,
   notifyAppearanceChange,
   readAppearancePreferenceFromCookie,
@@ -155,5 +157,16 @@ describe("appearance resolution", () => {
         expect(document.cookie).toContain("taskfella_appearance_generation=9");
       },
     );
+  });
+
+  it("keeps the reset generation across appearance-cache clearing", () => {
+    withCookieDocument("taskfella_appearance_generation=12", () => {
+      clearAppearancePreferenceCache();
+      expect(document.cookie).toContain("taskfella_appearance_generation=12");
+
+      const nextGeneration = beginAppearanceLifecycle();
+      expect(nextGeneration).toBeGreaterThan(12);
+      expect(document.cookie).toContain(`taskfella_appearance_generation=${nextGeneration}`);
+    });
   });
 });

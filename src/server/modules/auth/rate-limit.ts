@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, lte } from "drizzle-orm";
 import { type Database } from "@/server/db/client";
 import { authRateLimits } from "@/server/db/schema";
 import { AppError } from "@/server/http/errors";
@@ -79,90 +79,81 @@ export async function consumeRateLimit(
 
   const keyHash = rateLimitKey(input.operation, input.subject);
   const windowEnd = new Date(now.getTime() + policy.windowMs);
-  const nowIso = now.toISOString();
-  const windowEndIso = windowEnd.toISOString();
 
   return db.transaction(async (tx) => {
-    const [consumed] = await tx
+    await pruneExpiredRateLimits(tx, now);
+    await tx
       .insert(authRateLimits)
       .values({
         keyHash,
-        attempts: 1,
+        attempts: 0,
         windowStartedAt: now,
         expiresAt: windowEnd,
         updatedAt: now,
       })
-      .onConflictDoUpdate({
-        target: authRateLimits.keyHash,
-        set: {
-          attempts: sql`
-            CASE
-              WHEN ${authRateLimits.expiresAt} <= ${nowIso} THEN 1
-              ELSE ${authRateLimits.attempts} + 1
-            END
-          `,
-          windowStartedAt: sql`
-            CASE
-              WHEN ${authRateLimits.expiresAt} <= ${nowIso} THEN ${nowIso}
-              ELSE ${authRateLimits.windowStartedAt}
-            END
-          `,
-          expiresAt: sql`
-            CASE
-              WHEN ${authRateLimits.expiresAt} <= ${nowIso} THEN ${windowEndIso}
-              ELSE ${authRateLimits.expiresAt}
-            END
-          `,
-          updatedAt: now,
-        },
-        setWhere: sql`
-          ${authRateLimits.expiresAt} <= ${nowIso}
-          OR ${authRateLimits.attempts} < ${policy.maxAttempts}
-        `,
-      })
-      .returning();
+      .onConflictDoNothing({ target: authRateLimits.keyHash });
 
-    if (consumed) {
-      // The upsert locks the bucket and refreshes it before pruning, so a
-      // concurrent consumer cannot prune the row it is about to consume.
-      await pruneExpiredRateLimits(tx, now);
-      return {
-        allowed: true,
-        limit: policy.maxAttempts,
-        remaining: policy.maxAttempts - consumed.attempts,
-        retryAfterSeconds: Math.max(
-          1,
-          Math.ceil((consumed.expiresAt.getTime() - now.getTime()) / 1000),
-        ),
-      };
-    }
-
-    // A false conflict predicate means the bucket is already full. Lock and
-    // read it before returning the denial so the decision remains serialized
-    // with consumers that are completing the same bucket transition.
-    const [latest] = await tx
+    const [current] = await tx
       .select()
       .from(authRateLimits)
       .where(eq(authRateLimits.keyHash, keyHash))
       .for("update");
 
-    if (!latest) {
+    if (!current) {
       throw new Error("Rate-limit state could not be read.");
     }
 
-    if (latest.attempts >= policy.maxAttempts) {
+    if (current.expiresAt.getTime() <= now.getTime()) {
+      await tx
+        .update(authRateLimits)
+        .set({
+          attempts: 1,
+          windowStartedAt: now,
+          expiresAt: windowEnd,
+          updatedAt: now,
+        })
+        .where(eq(authRateLimits.keyHash, keyHash));
+
+      return {
+        allowed: true,
+        limit: policy.maxAttempts,
+        remaining: policy.maxAttempts - 1,
+        retryAfterSeconds: Math.ceil(policy.windowMs / 1000),
+      };
+    }
+
+    if (current.attempts >= policy.maxAttempts) {
       return {
         allowed: false,
         limit: policy.maxAttempts,
         remaining: 0,
         retryAfterSeconds: Math.max(
           1,
-          Math.ceil((latest.expiresAt.getTime() - now.getTime()) / 1000),
+          Math.ceil((current.expiresAt.getTime() - now.getTime()) / 1000),
         ),
       };
     }
 
-    throw new Error("Rate-limit state could not be consumed.");
+    const attempts = current.attempts + 1;
+    await tx
+      .update(authRateLimits)
+      .set({ attempts, updatedAt: now })
+      .where(
+        and(
+          eq(authRateLimits.keyHash, keyHash),
+          lte(authRateLimits.attempts, policy.maxAttempts - 1),
+        ),
+      );
+
+    return {
+      allowed: true,
+      limit: policy.maxAttempts,
+      remaining: policy.maxAttempts - attempts,
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil((current.expiresAt.getTime() - now.getTime()) / 1000),
+      ),
+    };
   });
 }
 
@@ -180,7 +171,6 @@ export async function pruneExpiredRateLimits(
     .from(authRateLimits)
     .where(lte(authRateLimits.expiresAt, now))
     .orderBy(authRateLimits.expiresAt)
-    .for("update", { skipLocked: true })
     .limit(RATE_LIMIT_PRUNE_BATCH_SIZE);
   if (expired.length === 0) {
     return 0;
