@@ -4,29 +4,51 @@ import { useEffect } from "react";
 import {
   APPEARANCE_CHANGE_EVENT,
   applyAppearance,
+  compareAppearanceRevisions,
   isAppearancePreference,
   readAppearanceCookie,
+  readAppearanceRevision,
   type AppearancePreference,
 } from "./theme";
 
 interface ThemeControllerProps {
   initialPreference: AppearancePreference;
   serverOwnsPreference: boolean;
+  initialRevision?: string;
 }
 
-export function ThemeController({ initialPreference, serverOwnsPreference }: ThemeControllerProps) {
+export function ThemeController({
+  initialPreference,
+  serverOwnsPreference,
+  initialRevision,
+}: ThemeControllerProps) {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     let authoritativePreference = serverOwnsPreference ? initialPreference : undefined;
+    let authoritativeRevision = serverOwnsPreference ? initialRevision : readAppearanceRevision();
     const applyCurrent = () => {
       const preference = authoritativePreference ?? readAppearanceCookie();
       applyAppearance(preference, media.matches);
     };
     const updateFromAppearanceEvent = (event: Event) => {
-      if (event instanceof CustomEvent && isAppearancePreference(event.detail)) {
-        authoritativePreference = event.detail;
+      const detail =
+        event instanceof CustomEvent && typeof event.detail === "object" && event.detail !== null
+          ? (event.detail as { preference?: unknown; revision?: unknown })
+          : undefined;
+      if (detail && isAppearancePreference(detail.preference)) {
+        const revision = typeof detail.revision === "string" ? detail.revision : undefined;
+        if (
+          revision &&
+          authoritativeRevision &&
+          compareAppearanceRevisions(revision, authoritativeRevision) < 0
+        ) {
+          return;
+        }
+        authoritativePreference = detail.preference;
+        authoritativeRevision = revision;
       } else if (!serverOwnsPreference) {
         authoritativePreference = readAppearanceCookie();
+        authoritativeRevision = readAppearanceRevision();
       }
       applyCurrent();
     };
@@ -38,7 +60,7 @@ export function ThemeController({ initialPreference, serverOwnsPreference }: The
       media.removeEventListener("change", applyCurrent);
       window.removeEventListener(APPEARANCE_CHANGE_EVENT, updateFromAppearanceEvent);
     };
-  }, [initialPreference, serverOwnsPreference]);
+  }, [initialPreference, initialRevision, serverOwnsPreference]);
 
   return null;
 }

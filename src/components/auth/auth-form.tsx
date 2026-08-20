@@ -12,6 +12,8 @@ import {
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
+  APPEARANCE_RESET_REVISION,
+  clearAppearancePreferenceCache,
   detectBrowserTimezone,
   notifyAppearanceChange,
   type AppearancePreference,
@@ -447,7 +449,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           error?: ApiError;
           message?: string;
           status?: "pending" | "success";
-          account?: { appearance?: AppearancePreference };
+          account?: { appearance?: AppearancePreference; appearanceRevision?: string };
         };
 
         if (!response.ok) {
@@ -490,8 +492,12 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           }
         }
         if (mode === "login" || mode === "reset") {
+          if (mode === "reset") {
+            clearAppearancePreferenceCache();
+          }
           notifyAppearanceChange(
             mode === "login" ? (payload.account?.appearance ?? "system") : "system",
+            mode === "login" ? payload.account?.appearanceRevision : APPEARANCE_RESET_REVISION,
           );
         }
         if (mode === "login") {

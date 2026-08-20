@@ -1,4 +1,6 @@
 export const APPEARANCE_COOKIE = "taskfella_appearance";
+export const APPEARANCE_REVISION_COOKIE = "taskfella_appearance_revision";
+export const APPEARANCE_RESET_REVISION = "0";
 const APPEARANCE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 export const APPEARANCE_CHANGE_EVENT = "taskfella:appearance-change";
 export const APPEARANCE_PREFERENCES = ["system", "light", "dark"] as const;
@@ -6,18 +8,49 @@ export type AppearancePreference = (typeof APPEARANCE_PREFERENCES)[number];
 export type ResolvedAppearance = "light" | "dark";
 export { detectBrowserTimezone } from "@/shared/timezone";
 
-export function notifyAppearanceChange(preference?: AppearancePreference): void {
+let cachedAppearancePreference: AppearancePreference | undefined;
+let cachedAppearanceRevision: string | undefined;
+
+export function notifyAppearanceChange(preference: AppearancePreference, revision?: string): void {
+  if (
+    revision &&
+    (revision === APPEARANCE_RESET_REVISION ||
+      !cachedAppearanceRevision ||
+      compareAppearanceRevisions(revision, cachedAppearanceRevision) >= 0)
+  ) {
+    cachedAppearancePreference = preference;
+    cachedAppearanceRevision = revision;
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent(APPEARANCE_CHANGE_EVENT, {
-        detail: preference,
+        detail: { preference, revision },
       }),
     );
   }
 }
 
-export function cacheAppearancePreference(preference: AppearancePreference): void {
+export function cacheAppearancePreference(
+  preference: AppearancePreference,
+  revision?: string,
+): void {
   if (typeof document === "undefined") return;
+  if (
+    revision &&
+    cachedAppearanceRevision &&
+    compareAppearanceRevisions(revision, cachedAppearanceRevision) < 0
+  ) {
+    if (cachedAppearancePreference) {
+      writeAppearanceCache(cachedAppearancePreference, cachedAppearanceRevision);
+    }
+    return;
+  }
+  cachedAppearancePreference = preference;
+  cachedAppearanceRevision = revision;
+  writeAppearanceCache(preference, revision);
+}
+
+function writeAppearanceCache(preference: AppearancePreference, revision?: string): void {
   const secure = typeof window !== "undefined" && window.location.protocol === "https:";
   document.cookie = [
     `${APPEARANCE_COOKIE}=${encodeURIComponent(preference)}`,
@@ -28,6 +61,25 @@ export function cacheAppearancePreference(preference: AppearancePreference): voi
   ]
     .filter(Boolean)
     .join("; ");
+  if (revision) {
+    document.cookie = [
+      APPEARANCE_REVISION_COOKIE + "=" + encodeURIComponent(revision),
+      "path=/",
+      "max-age=" + APPEARANCE_COOKIE_MAX_AGE_SECONDS,
+      "samesite=lax",
+      secure ? "secure" : undefined,
+    ]
+      .filter(Boolean)
+      .join("; ");
+  }
+}
+
+export function clearAppearancePreferenceCache(): void {
+  if (typeof document === "undefined") return;
+  cachedAppearancePreference = undefined;
+  cachedAppearanceRevision = undefined;
+  document.cookie = APPEARANCE_COOKIE + "=; path=/; max-age=0";
+  document.cookie = APPEARANCE_REVISION_COOKIE + "=; path=/; max-age=0";
 }
 
 export function resolveAppearance(
@@ -42,6 +94,22 @@ export function isAppearancePreference(value: unknown): value is AppearancePrefe
   return (
     typeof value === "string" && APPEARANCE_PREFERENCES.includes(value as AppearancePreference)
   );
+}
+
+export function compareAppearanceRevisions(left: string, right: string): number {
+  if (left === APPEARANCE_RESET_REVISION) return right === left ? 0 : -1;
+  if (right === APPEARANCE_RESET_REVISION) return 1;
+  if (/^\d+$/.test(left) && /^\d+$/.test(right)) {
+    const leftValue = BigInt(left);
+    const rightValue = BigInt(right);
+    return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+  }
+  const leftTime = Date.parse(left);
+  const rightTime = Date.parse(right);
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+    return leftTime < rightTime ? -1 : leftTime > rightTime ? 1 : 0;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 export function readAppearancePreferenceFromCookie(
@@ -73,6 +141,24 @@ export function readAppearanceCookie(): AppearancePreference {
   } catch {
     return "system";
   }
+}
+
+function readCookie(name: string): string | undefined {
+  const prefix = name + "=";
+  const part = document.cookie
+    .split(";")
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(prefix));
+  if (!part) return undefined;
+  try {
+    return decodeURIComponent(part.slice(prefix.length));
+  } catch {
+    return undefined;
+  }
+}
+
+export function readAppearanceRevision(): string | undefined {
+  return readCookie(APPEARANCE_REVISION_COOKIE);
 }
 
 export function applyAppearanceFromCookie(): ResolvedAppearance {

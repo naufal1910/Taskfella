@@ -8,6 +8,7 @@ import {
   requireAuthCsrf,
 } from "@/server/http/auth-route";
 import { parseEmailPassword } from "@/server/modules/auth/input";
+import { getAccountVersion } from "@/server/modules/auth/accounts";
 import {
   getSessionToken,
   setAppearanceCookie,
@@ -37,6 +38,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (result.state === "unverified") {
       throw new AppError("EMAIL_NOT_VERIFIED");
     }
+    let appearanceRevision = result.account.updatedAt.toISOString();
+    try {
+      appearanceRevision = (await getAccountVersion(db, result.account.id)) ?? appearanceRevision;
+    } catch {
+      appearanceRevision = result.account.updatedAt.toISOString();
+    }
 
     const response = noStoreResponse(
       {
@@ -46,6 +53,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           email: result.account.email,
           emailVerifiedAt: result.account.emailVerifiedAt,
           appearance: result.account.appearance,
+          appearanceRevision,
         },
       },
       200,
@@ -56,6 +64,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       response,
       result.account.appearance as "system" | "light" | "dark",
       context.environment,
+      appearanceRevision,
     );
     return response;
   });

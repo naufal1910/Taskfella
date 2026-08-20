@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useState } from "react";
 import { StatusBadge } from "@/components/ui/primitives";
-import { notifyAppearanceChange } from "@/components/theme/theme";
+import {
+  APPEARANCE_RESET_REVISION,
+  clearAppearancePreferenceCache,
+  notifyAppearanceChange,
+} from "@/components/theme/theme";
 import { PendingFeedback } from "./pending-feedback";
 
 function readCsrfCookie(): string | undefined {
@@ -35,7 +39,8 @@ export function LogoutForm() {
       });
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
-      notifyAppearanceChange("system");
+      clearAppearancePreferenceCache();
+      notifyAppearanceChange("system", APPEARANCE_RESET_REVISION);
       setMessage("You are signed out. The session cookie was cleared.");
     } catch {
       setMessageTone("error");

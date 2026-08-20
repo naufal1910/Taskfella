@@ -33,6 +33,7 @@ type AccountIdentities = Awaited<ReturnType<typeof listAccountOAuthIdentities>>;
 export function accountPayload(
   account: typeof accounts.$inferSelect,
   identities: AccountIdentities = [],
+  appearanceRevision?: string,
 ) {
   const pomodoro = {
     focusDurationMinutes: account.focusDurationMinutes,
@@ -53,6 +54,7 @@ export function accountPayload(
     name: account.displayName,
     timezone: account.timezone,
     appearance: account.appearance,
+    appearanceRevision,
     theme: account.appearance,
     notificationsEnabled: account.notificationsEnabled,
     notifications: account.notificationsEnabled,
@@ -86,18 +88,28 @@ export function accountPayload(
 
 async function accountResponse(
   account: typeof accounts.$inferSelect,
-  options: { syncAppearanceCookie?: boolean } = {},
+  options: { syncAppearanceCookie?: boolean; appearanceRevision?: string } = {},
 ): Promise<NextResponse> {
   const identities = await listAccountOAuthIdentities(getDatabase(), account.id);
-  const response = noStoreResponse({ ok: true, account: accountPayload(account, identities) });
+  const response = noStoreResponse({
+    ok: true,
+    account: accountPayload(account, identities, options.appearanceRevision),
+  });
   if (options.syncAppearanceCookie !== false) {
-    setAppearanceCookie(response, account.appearance as "system" | "light" | "dark");
+    setAppearanceCookie(
+      response,
+      account.appearance as "system" | "light" | "dark",
+      undefined,
+      options.appearanceRevision,
+    );
   }
   return response;
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
-  return protectedRoute(request, ({ account }) => accountResponse(account));
+  return protectedRoute(request, ({ account, accountVersion }) =>
+    accountResponse(account, { appearanceRevision: accountVersion }),
+  );
 }
 
 async function update(request: Request): Promise<NextResponse> {
@@ -109,17 +121,29 @@ async function update(request: Request): Promise<NextResponse> {
         const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
         const database = getDatabase();
         let updated: typeof accounts.$inferSelect | undefined;
+        let appearanceRevision: string | undefined;
         if (appearancePatch) {
-          [updated] = await database.transaction(async (tx) => {
+          const result = await database.transaction(async (tx) => {
             await tx.execute(
               sql`SELECT pg_advisory_xact_lock(hashtext(CAST(${account.id} AS text)))`,
             );
-            return tx
+            const [updated] = await tx
               .update(accounts)
               .set({ ...patch, updatedAt: new Date() })
               .where(and(eq(accounts.id, account.id), sql`xmin::text = ${accountVersion}`))
               .returning();
+            if (!updated) {
+              return { updated, revision: undefined };
+            }
+            const [version] = await tx
+              .select({ value: sql<string>`xmin::text` })
+              .from(accounts)
+              .where(eq(accounts.id, account.id))
+              .limit(1);
+            return { updated, revision: version?.value };
           });
+          updated = result.updated;
+          appearanceRevision = result.revision;
         } else {
           [updated] = await database
             .update(accounts)
@@ -133,7 +157,10 @@ async function update(request: Request): Promise<NextResponse> {
           throw new Error("Account settings could not be saved.");
         }
 
-        return accountResponse(updated, { syncAppearanceCookie: appearancePatch });
+        return accountResponse(updated, {
+          syncAppearanceCookie: appearancePatch,
+          appearanceRevision,
+        });
       },
       { mutation: true },
     );

@@ -6,6 +6,7 @@ import { APPEARANCE_VALUES, type Appearance } from "@/server/modules/account/set
 export const SESSION_COOKIE_NAME = "taskfella_session";
 export const CSRF_COOKIE_NAME = "taskfella_csrf";
 export const APPEARANCE_COOKIE_NAME = "taskfella_appearance";
+export const APPEARANCE_REVISION_COOKIE_NAME = "taskfella_appearance_revision";
 export const CSRF_HEADER_NAME = "x-csrf-token";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 export const CSRF_COOKIE_MAX_AGE_SECONDS = 24 * 60 * 60;
@@ -58,13 +59,16 @@ export function getAppearanceCookie(request: Request): Appearance | undefined {
     : undefined;
 }
 
+export function getAppearanceRevisionCookie(request: Request): string | undefined {
+  return readCookie(request, APPEARANCE_REVISION_COOKIE_NAME);
+}
+
 export function getOAuthStateCookie(request: Request): string | undefined {
   return readCookie(request, OAUTH_STATE_COOKIE_NAME);
 }
 
 export function getOAuthCodeVerifierCookie(request: Request): string | undefined {
   return readCookie(request, OAUTH_VERIFIER_COOKIE_NAME);
-}
 }
 
 function isProduction(environment: AppEnv): boolean {
@@ -134,16 +138,29 @@ export function setAppearanceCookie(
   response: NextResponse,
   appearance: Appearance,
   environment?: AppEnv,
+  revision?: string,
 ): void {
   setCookie(response, APPEARANCE_COOKIE_NAME, appearance, {
     maxAge: APPEARANCE_COOKIE_MAX_AGE_SECONDS,
     httpOnly: false,
     secure: appearanceCookieIsSecure(environment),
   });
+  if (revision) {
+    setCookie(response, APPEARANCE_REVISION_COOKIE_NAME, revision, {
+      maxAge: APPEARANCE_COOKIE_MAX_AGE_SECONDS,
+      httpOnly: false,
+      secure: appearanceCookieIsSecure(environment),
+    });
+  }
 }
 
 export function clearAppearanceCookie(response: NextResponse, environment?: AppEnv): void {
   setCookie(response, APPEARANCE_COOKIE_NAME, "", {
+    maxAge: 0,
+    httpOnly: false,
+    secure: appearanceCookieIsSecure(environment),
+  });
+  setCookie(response, APPEARANCE_REVISION_COOKIE_NAME, "", {
     maxAge: 0,
     httpOnly: false,
     secure: appearanceCookieIsSecure(environment),

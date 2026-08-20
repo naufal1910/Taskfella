@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   APPEARANCE_CHANGE_EVENT,
+  compareAppearanceRevisions,
   notifyAppearanceChange,
   readAppearancePreferenceFromCookie,
   resolveAppearance,
@@ -30,8 +31,8 @@ describe("appearance resolution", () => {
     Object.defineProperty(globalThis, "window", { configurable: true, value: testWindow });
 
     try {
-      notifyAppearanceChange("dark");
-      expect(received).toBe("dark");
+      notifyAppearanceChange("dark", "42");
+      expect(received).toEqual({ preference: "dark", revision: "42" });
     } finally {
       if (previousWindow === undefined) {
         Reflect.deleteProperty(globalThis, "window");
@@ -42,5 +43,11 @@ describe("appearance resolution", () => {
         });
       }
     }
+  });
+
+  it("orders numeric appearance revisions", () => {
+    expect(compareAppearanceRevisions("42", "41")).toBeGreaterThan(0);
+    expect(compareAppearanceRevisions("41", "42")).toBeLessThan(0);
+    expect(compareAppearanceRevisions("42", "42")).toBe(0);
   });
 });

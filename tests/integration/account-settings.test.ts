@@ -73,6 +73,7 @@ integration("Phase 1D account settings routes", () => {
         displayName: "",
         timezone: "UTC",
         appearance: "system",
+        appearanceRevision: expect.any(String),
         notificationsEnabled: true,
         soundEnabled: true,
         focusDurationMinutes: 25,
@@ -106,6 +107,7 @@ integration("Phase 1D account settings routes", () => {
         displayName: "Focused owner",
         timezone: "Asia/Tokyo",
         appearance: "dark",
+        appearanceRevision: expect.any(String),
         notificationsEnabled: false,
         soundEnabled: false,
         pomodoro: {

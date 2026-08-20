@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { ThemeController } from "@/components/theme/theme-controller";
 import { resolveAuthenticatedAccount } from "@/server/http/authentication";
 import { APPEARANCE_VALUES, type Appearance } from "@/server/modules/account/settings";
-import { getAppearanceCookie } from "@/server/modules/auth/cookies";
+import { getAppearanceCookie, getAppearanceRevisionCookie } from "@/server/modules/auth/cookies";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 interface InitialAppearance {
   preference: Appearance;
   authenticated: boolean;
+  revision?: string;
 }
 
 async function resolveInitialAppearance(): Promise<InitialAppearance> {
@@ -21,6 +22,7 @@ async function resolveInitialAppearance(): Promise<InitialAppearance> {
     headers: new Headers(await headers()),
   });
   const cached = getAppearanceCookie(request);
+  const cachedRevision = getAppearanceRevisionCookie(request);
   let authenticated: Awaited<ReturnType<typeof resolveAuthenticatedAccount>> = null;
   try {
     authenticated = await resolveAuthenticatedAccount(request);
@@ -34,9 +36,10 @@ async function resolveInitialAppearance(): Promise<InitialAppearance> {
         ? (preference as Appearance)
         : "system",
       authenticated: true,
+      revision: authenticated.accountVersion,
     };
   }
-  return { preference: cached ?? "system", authenticated: false };
+  return { preference: cached ?? "system", authenticated: false, revision: cachedRevision };
 }
 
 function themeBootstrap(initialAppearance: InitialAppearance): string {
@@ -94,6 +97,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <ThemeController
           initialPreference={initialAppearance.preference}
           serverOwnsPreference={initialAppearance.authenticated}
+          initialRevision={initialAppearance.revision}
         />
         {children}
       </body>

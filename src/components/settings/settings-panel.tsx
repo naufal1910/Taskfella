@@ -4,8 +4,11 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   cacheAppearancePreference,
+  clearAppearancePreferenceCache,
+  compareAppearanceRevisions,
   detectBrowserTimezone,
   notifyAppearanceChange,
+  APPEARANCE_RESET_REVISION,
   type AppearancePreference,
 } from "@/components/theme/theme";
 import { createAppearanceMutationTracker } from "@/shared/appearance-mutation";
@@ -29,6 +32,7 @@ interface AccountPayload {
   displayName?: string;
   timezone?: string;
   appearance?: AppearancePreference;
+  appearanceRevision?: string;
   notificationsEnabled?: boolean;
   soundEnabled?: boolean;
   focusDurationMinutes?: number;
@@ -234,6 +238,7 @@ export function SettingsPanel() {
   );
   const appearanceSaveTailRef = useRef(Promise.resolve());
   const saveControllersRef = useRef(new Set<AbortController>());
+  const savedAppearanceRevisionRef = useRef<string | undefined>(undefined);
   const [status, setStatus] = useState<string>();
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -248,7 +253,7 @@ export function SettingsPanel() {
       for (const controller of saveControllers) controller.abort();
       const savedAppearance = mutationTracker.getSaved();
       if (savedAppearance) {
-        notifyAppearanceChange(savedAppearance);
+        notifyAppearanceChange(savedAppearance, savedAppearanceRevisionRef.current);
       }
     };
   }, []);
@@ -268,6 +273,8 @@ export function SettingsPanel() {
       .then(async (response) => {
         if (!active) return;
         if (response.status === 401) {
+          clearAppearancePreferenceCache();
+          notifyAppearanceChange("system", APPEARANCE_RESET_REVISION);
           setUnauthenticated(true);
           return;
         }
@@ -277,8 +284,9 @@ export function SettingsPanel() {
         setAccount(payload.account);
         setValues(valuesFromAccount(payload.account));
         const preference = payload.account.appearance ?? "system";
+        savedAppearanceRevisionRef.current = payload.account.appearanceRevision;
         appearanceMutationTrackerRef.current.recordSaved(preference);
-        notifyAppearanceChange(preference);
+        notifyAppearanceChange(preference, savedAppearanceRevisionRef.current);
       })
       .catch(() => {
         if (active) setError("We could not load your settings. Try again.");
@@ -345,6 +353,8 @@ export function SettingsPanel() {
         if (controller.signal.aborted) return;
         if (response.status === 401) {
           invalidatePendingSaves();
+          clearAppearancePreferenceCache();
+          notifyAppearanceChange("system", APPEARANCE_RESET_REVISION);
           setUnauthenticated(true);
           return;
         }
@@ -370,13 +380,27 @@ export function SettingsPanel() {
         setStatus("Saved.");
         if (appearancePatch) {
           const preference = payload.account.appearance ?? "system";
-          appearanceMutationTrackerRef.current.recordSaved(preference);
-          cacheAppearancePreference(preference);
-          if (
-            appearanceMutationId !== undefined &&
-            appearanceMutationTrackerRef.current.isCurrent(appearanceMutationId)
-          ) {
-            notifyAppearanceChange(preference);
+          const revision = payload.account.appearanceRevision;
+          const savedRevision = savedAppearanceRevisionRef.current;
+          const responseIsOlder =
+            revision !== undefined &&
+            savedRevision !== undefined &&
+            compareAppearanceRevisions(revision, savedRevision) < 0;
+          if (responseIsOlder) {
+            const savedAppearance = appearanceMutationTrackerRef.current.getSaved();
+            if (savedAppearance) {
+              cacheAppearancePreference(savedAppearance, savedRevision);
+            }
+          } else {
+            appearanceMutationTrackerRef.current.recordSaved(preference);
+            savedAppearanceRevisionRef.current = revision ?? savedRevision;
+            cacheAppearancePreference(preference, savedAppearanceRevisionRef.current);
+            if (
+              appearanceMutationId !== undefined &&
+              appearanceMutationTrackerRef.current.isCurrent(appearanceMutationId)
+            ) {
+              notifyAppearanceChange(preference, savedAppearanceRevisionRef.current);
+            }
           }
         }
       } catch (caught) {
