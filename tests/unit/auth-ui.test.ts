@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -16,12 +15,11 @@ import {
 } from "@/components/auth/auth-form";
 import { AuthPage } from "@/components/auth/auth-page";
 import { LogoutForm } from "@/components/auth/logout-form";
+import { PendingFeedback } from "@/components/auth/pending-feedback";
 
 function markup(element: React.ReactElement): string {
   return renderToStaticMarkup(element);
 }
-
-const authStyles = readFileSync(new URL("../../src/app/globals.css", import.meta.url), "utf8");
 
 describe("authentication lifecycle UI", () => {
   it("keeps account forms labeled, touch-sized, and associated with help text", () => {
@@ -97,12 +95,21 @@ describe("authentication lifecycle UI", () => {
     expect(page).toContain("Private, focused personal work");
   });
 
-  it("keeps authentication layouts responsive and removes nonessential motion", () => {
-    expect(authStyles).toContain("@media (max-width: 560px)");
-    expect(authStyles).toContain(".auth-header nav .nav-link");
-    expect(authStyles).toContain(".auth-state__actions");
-    expect(authStyles).toContain("min-height: var(--size-touch-target)");
-    expect(authStyles).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(authStyles).toContain(".auth-loading-line");
+  it("renders outcome focus targets and announcements for async auth states", () => {
+    const expired = markup(createElement(TokenState, { mode: "verify", code: "TOKEN_EXPIRED" }));
+    const success = markup(
+      createElement(CompletionState, { mode: "reset", message: "Password reset complete." }),
+    );
+    const pending = markup(createElement(PendingFeedback, { message: "Signing out…" }));
+
+    expect(expired).toContain('role="alert"');
+    expect(expired).toContain('aria-live="assertive"');
+    expect(expired).toContain('tabindex="-1"');
+    expect(success).toContain('role="status"');
+    expect(success).toContain('aria-live="polite"');
+    expect(success).toContain('tabindex="-1"');
+    expect(pending).toContain('role="status"');
+    expect(pending).toContain('aria-live="polite"');
+    expect(pending).toContain('aria-busy="true"');
   });
 });

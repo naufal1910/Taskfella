@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
+import { PendingFeedback } from "./pending-feedback";
 
 interface AccountPayload {
   id: string;
@@ -74,6 +75,7 @@ function LogoutControl() {
       >
         {pending ? "Signing out…" : "Sign out"}
       </button>
+      {pending && <PendingFeedback message="Signing out…" />}
       {message && (
         <div
           className={`account-action__feedback account-action__feedback--${messageTone}`}

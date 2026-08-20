@@ -211,6 +211,16 @@ function tokenStateCopy(
   }
 }
 
+function useOutcomeHeadingFocus() {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
+  return headingRef;
+}
+
 export function TokenState({
   mode,
   code,
@@ -222,13 +232,22 @@ export function TokenState({
 }) {
   const state = tokenStateCopy(mode, code, missing);
   const titleId = `${mode}-token-title`;
+  const headingRef = useOutcomeHeadingFocus();
 
   return (
-    <section className="auth-card auth-card--state" aria-labelledby={titleId}>
+    <section
+      className="auth-card auth-card--state"
+      role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
+      aria-labelledby={titleId}
+    >
       <div className="auth-state">
         <StatusBadge status={state.status}>{state.badge}</StatusBadge>
         <p className="eyebrow">{mode === "verify" ? "Email verification" : "Password reset"}</p>
-        <h1 id={titleId}>{state.title}</h1>
+        <h1 ref={headingRef} id={titleId} tabIndex={-1}>
+          {state.title}
+        </h1>
         <p className="auth-intro">{state.description}</p>
         <div className="auth-state__actions">
           <Link className="ui-button ui-button--primary" href={state.actionHref}>
@@ -245,13 +264,22 @@ export function TokenState({
 
 export function CompletionState({ mode, message }: { mode: "verify" | "reset"; message: string }) {
   const titleId = `${mode}-success-title`;
+  const headingRef = useOutcomeHeadingFocus();
 
   return (
-    <section className="auth-card auth-card--state" aria-labelledby={titleId}>
+    <section
+      className="auth-card auth-card--state"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-labelledby={titleId}
+    >
       <div className="auth-state">
         <StatusBadge status="success">Complete</StatusBadge>
         <p className="eyebrow">{mode === "verify" ? "Email verification" : "Password reset"}</p>
-        <h1 id={titleId}>{mode === "verify" ? "Email verified" : "Password reset"}</h1>
+        <h1 ref={headingRef} id={titleId} tabIndex={-1}>
+          {mode === "verify" ? "Email verified" : "Password reset"}
+        </h1>
         <p className="auth-intro">{message}</p>
         <div className="auth-state__actions">
           <Link className="ui-button ui-button--primary" href="/login">

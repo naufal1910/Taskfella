@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { StatusBadge } from "@/components/ui/primitives";
+import { PendingFeedback } from "./pending-feedback";
 
 function readCsrfCookie(): string | undefined {
   const prefix = "taskfella_csrf=";
@@ -44,7 +45,17 @@ export function LogoutForm() {
 
   return (
     <section className="auth-card" aria-labelledby="logout-title" aria-busy={pending}>
-      <StatusBadge status={messageTone === "error" ? "danger" : message ? "success" : "neutral"}>
+      <StatusBadge
+        status={
+          pending
+            ? "neutral"
+            : messageTone === "error"
+              ? "danger"
+              : message
+                ? "success"
+                : "neutral"
+        }
+      >
         {pending
           ? "In progress"
           : messageTone === "error"
@@ -67,6 +78,7 @@ export function LogoutForm() {
       >
         {pending ? "Signing out…" : "Sign out"}
       </button>
+      {pending && <PendingFeedback message="Signing out…" />}
       {message && (
         <div
           className={`auth-feedback auth-feedback--${messageTone}`}
