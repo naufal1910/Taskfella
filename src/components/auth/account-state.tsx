@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { StatusBadge } from "@/components/ui/primitives";
+import { PendingFeedback } from "./pending-feedback";
 
 interface AccountPayload {
   id: string;
@@ -37,6 +39,7 @@ function LogoutControl() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
 
   async function logout(): Promise<void> {
     setPending(true);
@@ -50,9 +53,11 @@ function LogoutControl() {
         headers: { "x-csrf-token": token },
       });
       if (!response.ok) throw new Error("logout");
+      setMessageTone("success");
       setMessage("You are signed out.");
       router.push("/login");
     } catch {
+      setMessageTone("error");
       setMessage("We could not sign you out safely. Try again.");
     } finally {
       setPending(false);
@@ -62,14 +67,24 @@ function LogoutControl() {
   return (
     <div className="account-action">
       <button
-        className="secondary-action button-action"
+        className="ui-button ui-button--secondary account-action__button"
         type="button"
         onClick={logout}
         disabled={pending}
+        aria-busy={pending || undefined}
       >
         {pending ? "Signing out…" : "Sign out"}
       </button>
-      <span aria-live="polite">{message}</span>
+      {pending && <PendingFeedback message="Signing out…" />}
+      {message && (
+        <div
+          className={`account-action__feedback account-action__feedback--${messageTone}`}
+          role={messageTone === "error" ? "alert" : "status"}
+          aria-live={messageTone === "error" ? "assertive" : "polite"}
+        >
+          {message}
+        </div>
+      )}
     </div>
   );
 }
@@ -107,44 +122,71 @@ export function AccountState() {
 
   if (pending) {
     return (
-      <p className="account-status" aria-busy="true" aria-live="polite">
-        Loading your account…
-      </p>
+      <section
+        className="auth-card auth-card--state"
+        role="status"
+        aria-labelledby="account-loading-title"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <div className="auth-state">
+          <StatusBadge status="neutral">Loading</StatusBadge>
+          <p className="eyebrow">Current account</p>
+          <h1 id="account-loading-title">Loading your account</h1>
+          <p className="auth-intro">Checking the session associated with this browser…</p>
+          <div className="auth-loading-line" aria-hidden="true" />
+        </div>
+      </section>
     );
   }
   if (unauthenticated) {
     return (
-      <section className="auth-card" aria-labelledby="account-title">
-        <p className="eyebrow">Current account</p>
-        <h1 id="account-title">You are signed out.</h1>
-        <p className="auth-intro">Sign in to inspect the account associated with this browser.</p>
-        <Link className="primary-action" href="/login">
-          Sign in
-        </Link>
+      <section className="auth-card auth-card--state" aria-labelledby="account-title">
+        <div className="auth-state">
+          <StatusBadge status="neutral">Signed out</StatusBadge>
+          <p className="eyebrow">Current account</p>
+          <h1 id="account-title">You are signed out.</h1>
+          <p className="auth-intro">Sign in to inspect the account associated with this browser.</p>
+          <div className="auth-state__actions">
+            <Link className="ui-button ui-button--primary" href="/login">
+              Sign in
+            </Link>
+          </div>
+        </div>
       </section>
     );
   }
   if (error || !account) {
     return (
-      <section className="auth-card" role="alert" aria-labelledby="account-error-title">
-        <p className="eyebrow">Current account</p>
-        <h1 id="account-error-title">We could not load your account.</h1>
-        <p className="auth-intro">
-          Try again. No private account details were retained in this page.
-        </p>
-        <button
-          className="primary-action button-action"
-          type="button"
-          onClick={() => window.location.reload()}
-        >
-          Try again
-        </button>
+      <section
+        className="auth-card auth-card--state"
+        role="alert"
+        aria-labelledby="account-error-title"
+      >
+        <div className="auth-state">
+          <StatusBadge status="danger">Unable to load</StatusBadge>
+          <p className="eyebrow">Current account</p>
+          <h1 id="account-error-title">We could not load your account.</h1>
+          <p className="auth-intro">
+            Try again. No private account details were retained in this page.
+          </p>
+          <div className="auth-state__actions">
+            <button
+              className="ui-button ui-button--primary"
+              type="button"
+              onClick={() => window.location.reload()}
+            >
+              Try again
+            </button>
+          </div>
+        </div>
       </section>
     );
   }
 
   return (
     <section className="auth-card" aria-labelledby="account-title">
+      <StatusBadge status="success">Account active</StatusBadge>
       <p className="eyebrow">Current account</p>
       <h1 id="account-title">Your Taskfella account</h1>
       <dl className="account-details">

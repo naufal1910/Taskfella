@@ -54,9 +54,9 @@ export function TaskfellaShell() {
             account to keep your work ready for the product layers ahead.
           </p>
           <div className="hero-actions">
-            <Link className="primary-action" href="/signup">
+            <Link className="ui-button ui-button--primary" href="/signup">
               Create your account <span aria-hidden="true">→</span>
-            </Link>{" "}
+            </Link>
             <Button href="#status" variant="secondary">
               Explore the foundation <span aria-hidden="true">↓</span>
             </Button>

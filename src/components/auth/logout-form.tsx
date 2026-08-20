@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { StatusBadge } from "@/components/ui/primitives";
+import { PendingFeedback } from "./pending-feedback";
 
 function readCsrfCookie(): string | undefined {
   const prefix = "taskfella_csrf=";
@@ -15,6 +17,7 @@ function readCsrfCookie(): string | undefined {
 export function LogoutForm() {
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
 
   async function submit(): Promise<void> {
     setPending(true);
@@ -30,9 +33,11 @@ export function LogoutForm() {
         headers: { "x-csrf-token": token },
       });
       if (!response.ok) throw new Error("logout");
+      setMessageTone("success");
       setMessage("You are signed out. The session cookie was cleared.");
     } catch {
-      setMessage("We could not complete logout. Try again.");
+      setMessageTone("error");
+      setMessage("We could not complete logout safely. Try again.");
     } finally {
       setPending(false);
     }
@@ -40,25 +45,48 @@ export function LogoutForm() {
 
   return (
     <section className="auth-card" aria-labelledby="logout-title">
+      <StatusBadge
+        status={
+          pending ? "neutral" : messageTone === "error" ? "danger" : message ? "success" : "neutral"
+        }
+      >
+        {pending
+          ? "In progress"
+          : messageTone === "error"
+            ? "Needs attention"
+            : message
+              ? "Complete"
+              : "Session"}
+      </StatusBadge>
       <p className="eyebrow">Session</p>
       <h1 id="logout-title">Sign out of Taskfella</h1>
       <p className="auth-intro">
         Your presented session will be revoked and its browser cookie cleared.
       </p>
       <button
-        className="primary-action button-action"
+        className="ui-button ui-button--primary auth-submit"
         type="button"
         onClick={submit}
         disabled={pending}
+        aria-busy={pending || undefined}
       >
         {pending ? "Signing out…" : "Sign out"}
       </button>
-      <p className="auth-feedback" aria-live="polite">
-        {message}
-      </p>
-      <p className="auth-links">
+      {pending && <PendingFeedback message="Signing out…" />}
+      {message && (
+        <div
+          className={`auth-feedback auth-feedback--${messageTone}`}
+          role={messageTone === "error" ? "alert" : "status"}
+          aria-live={messageTone === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
+        >
+          <strong>{messageTone === "error" ? "Unable to continue" : "Complete"}</strong>
+          <p>{message}</p>
+        </div>
+      )}
+      <div className="auth-links">
         <Link href="/">Return home</Link>
-      </p>
+      </div>
     </section>
   );
 }

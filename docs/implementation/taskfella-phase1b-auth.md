@@ -20,4 +20,4 @@ SMTP uses the portable Nodemailer SMTP transport rather than a provider-specific
 
 ## Verification
 
-Run `pnpm db:migrate` after pulling the Phase 1B migration, then use `pnpm dev` and the routes `/signup`, `/verify-email`, `/login`, `/account`, `/logout`, `/forgot-password`, and `/reset-password`. The API route handlers are under `src/app/api/auth/` and return `cache-control: no-store` responses. `GET /api/health` remains tied to the latest migration hash in `src/server/db/client.ts`.
+Run `pnpm db:migrate` after pulling the Phase 1B migration, then use `pnpm dev` and the routes `/signup`, `/verify-email`, `/verify-email/resend`, `/login`, `/account`, `/logout`, `/forgot-password`, and `/reset-password`. The API route handlers are under `src/app/api/auth/` and return `cache-control: no-store` responses. `GET /api/health` remains tied to the latest migration hash in `src/server/db/client.ts`.
