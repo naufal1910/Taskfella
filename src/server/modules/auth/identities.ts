@@ -8,7 +8,12 @@ import {
   type OAuthIdentity,
   type OAuthTransaction,
 } from "@/server/db/schema";
-import { isUniqueConstraintViolation, normalizeEmail, validateEmail } from "./accounts";
+import {
+  isUniqueConstraintViolation,
+  lockEmailOwnership,
+  normalizeEmail,
+  validateEmail,
+} from "./accounts";
 import { type GoogleIdentityProfile } from "./google";
 import { type CreatedSession, issueSessionForAccountInTransaction } from "./sessions";
 import { hashBearerToken } from "./tokens";
@@ -161,6 +166,7 @@ export async function completeGoogleIdentity(
         return { state: "session-invalid" };
       }
 
+      await lockEmailOwnership(tx, normalizedEmail);
       const existingIdentity = await findIdentity(tx, provider, subject);
       const accountCandidate = await readAccount(tx, input.transaction.accountId);
       if (!accountCandidate) {
@@ -265,6 +271,7 @@ export async function completeGoogleIdentity(
       return { state: "linked", account, session };
     }
 
+    await lockEmailOwnership(tx, normalizedEmail);
     const existingIdentity = await findIdentity(tx, provider, subject);
     if (existingIdentity) {
       const account = await findAccount(tx, existingIdentity.accountId);

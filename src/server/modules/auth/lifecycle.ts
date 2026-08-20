@@ -16,7 +16,7 @@ import {
   type IssuedToken,
 } from "./tokens";
 import { hashPassword, validatePasswordInput, verifyPasswordWithFallback } from "./password";
-import { normalizeEmail, validateEmail } from "./accounts";
+import { lockEmailOwnership, normalizeEmail, validateEmail } from "./accounts";
 import { SESSION_TTL_MS } from "./sessions";
 
 export type OneTimeTokenState = "valid" | "invalid" | "expired" | "already-used" | "superseded";
@@ -83,6 +83,7 @@ export async function createAccountWithPasswordAndVerification(
   const expiresAt = expiryFrom(now, EMAIL_VERIFICATION_TOKEN_TTL_MS);
 
   return db.transaction(async (tx) => {
+    await lockEmailOwnership(tx, normalizedEmail);
     const [account] = await tx
       .insert(accounts)
       .values({

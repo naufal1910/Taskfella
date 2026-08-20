@@ -86,7 +86,7 @@ async function rateLimitOAuthFailure(
     if (error instanceof AppError && error.code === "RATE_LIMITED") {
       return "rate-limited";
     }
-    return "allowed";
+    throw error;
   }
 }
 
@@ -101,6 +101,9 @@ export async function startGoogleAuthorization(
   }
 
   const intent = getIntent(request);
+  if (intent === "signin" && request.method !== "GET") {
+    throw new AppError("FORBIDDEN");
+  }
   if (intent === "link") {
     if (request.method !== "POST") {
       throw new AppError("FORBIDDEN");

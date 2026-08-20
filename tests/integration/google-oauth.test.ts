@@ -269,6 +269,16 @@ integration("Google OAuth and explicit identity linking", () => {
         { db, environment, provider },
       ),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await expect(
+      startGoogleAuthorization(
+        new Request("http://localhost:3000/api/auth/google", {
+          method: "POST",
+          headers: { origin: "http://localhost:3000" },
+        }),
+        { db, environment, provider },
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("links explicitly, rotates the linking session, and keeps provider subjects private", async () => {
@@ -492,6 +502,16 @@ integration("Google OAuth and explicit identity linking", () => {
     });
     expect(replay.headers.get("location")).toContain("/login?oauth=state-invalid");
     await rememberAccountByEmail(pkceProfile.email);
+  });
+
+  it("fails closed when the OAuth failure rate-limit boundary rejects the client", async () => {
+    if (!db) return;
+    await expect(
+      handleGoogleCallback(new Request("http://localhost:3000/api/auth/google/callback"), {
+        db,
+        environment,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("allows only one concurrent callback to consume a ceremony", async () => {
