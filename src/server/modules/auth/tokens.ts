@@ -112,6 +112,7 @@ export async function consumeEmailVerificationToken(
       and(
         eq(emailVerificationTokens.tokenHash, tokenHash),
         isNull(emailVerificationTokens.consumedAt),
+        isNull(emailVerificationTokens.invalidatedAt),
         gt(emailVerificationTokens.expiresAt, now),
       ),
     )
@@ -165,6 +166,7 @@ export async function consumePasswordResetToken(
       and(
         eq(passwordResetTokens.tokenHash, tokenHash),
         isNull(passwordResetTokens.consumedAt),
+        isNull(passwordResetTokens.invalidatedAt),
         gt(passwordResetTokens.expiresAt, now),
       ),
     )

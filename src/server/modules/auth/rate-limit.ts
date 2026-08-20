@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, inArray, lte } from "drizzle-orm";
 import { type Database } from "@/server/db/client";
 import { authRateLimits } from "@/server/db/schema";
 import { AppError } from "@/server/http/errors";
@@ -23,6 +23,11 @@ export const AUTH_RATE_LIMITS = {
   passwordReset: { maxAttempts: 5, windowMs: 60 * 60 * 1000 },
   oauthFailure: { maxAttempts: 10, windowMs: 15 * 60 * 1000 },
 } as const satisfies Record<string, RateLimitPolicy>;
+
+const RATE_LIMIT_PRUNE_BATCH_SIZE = 100;
+
+type RateLimitTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type RateLimitDatabase = Database | RateLimitTransaction;
 
 function validatePolicy(policy: RateLimitPolicy): void {
   if (
@@ -75,6 +80,8 @@ export async function consumeRateLimit(
   const windowEnd = new Date(now.getTime() + policy.windowMs);
 
   return db.transaction(async (tx) => {
+    await pruneExpiredRateLimits(tx, now);
+
     await tx
       .insert(authRateLimits)
       .values({
@@ -150,11 +157,36 @@ export async function consumeRateLimit(
   });
 }
 
-/** Remove expired buckets in a maintenance call without touching live limits. */
-export async function pruneExpiredRateLimits(db: Database, now = new Date()): Promise<number> {
+/** Remove a bounded batch of expired buckets without touching live limits. */
+export async function pruneExpiredRateLimits(
+  db: RateLimitDatabase,
+  now = new Date(),
+): Promise<number> {
+  if (!Number.isFinite(now.getTime())) {
+    throw new Error("Rate-limit timestamp is invalid.");
+  }
+
+  const expired = await db
+    .select({ keyHash: authRateLimits.keyHash })
+    .from(authRateLimits)
+    .where(lte(authRateLimits.expiresAt, now))
+    .orderBy(authRateLimits.expiresAt)
+    .limit(RATE_LIMIT_PRUNE_BATCH_SIZE);
+  if (expired.length === 0) {
+    return 0;
+  }
+
   const deleted = await db
     .delete(authRateLimits)
-    .where(lte(authRateLimits.expiresAt, now))
+    .where(
+      and(
+        lte(authRateLimits.expiresAt, now),
+        inArray(
+          authRateLimits.keyHash,
+          expired.map(({ keyHash }) => keyHash),
+        ),
+      ),
+    )
     .returning({ keyHash: authRateLimits.keyHash });
   return deleted.length;
 }

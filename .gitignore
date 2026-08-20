@@ -10,7 +10,8 @@ coverage/
 .env.*
 !.env.example
 
-# Local database volume and editor files
+# Local database volume, captured development mail, and editor files
 postgres-data/
+.local/
 .vscode/
 .idea/

@@ -124,6 +124,7 @@ export const emailVerificationTokens = pgTable(
     tokenHash: text("token_hash").notNull(),
     expiresAt: utcTimestamp("expires_at").notNull(),
     consumedAt: utcTimestamp("consumed_at"),
+    invalidatedAt: utcTimestamp("invalidated_at"),
     createdAt: utcTimestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
@@ -143,6 +144,10 @@ export const emailVerificationTokens = pgTable(
       "email_verification_tokens_consumed_at_after_created_check",
       sql`${table.consumedAt} IS NULL OR ${table.consumedAt} >= ${table.createdAt}`,
     ),
+    check(
+      "email_verification_tokens_invalidated_at_after_created_check",
+      sql`${table.invalidatedAt} IS NULL OR ${table.invalidatedAt} >= ${table.createdAt}`,
+    ),
   ],
 );
 
@@ -156,6 +161,7 @@ export const passwordResetTokens = pgTable(
     tokenHash: text("token_hash").notNull(),
     expiresAt: utcTimestamp("expires_at").notNull(),
     consumedAt: utcTimestamp("consumed_at"),
+    invalidatedAt: utcTimestamp("invalidated_at"),
     createdAt: utcTimestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
@@ -174,6 +180,10 @@ export const passwordResetTokens = pgTable(
     check(
       "password_reset_tokens_consumed_at_after_created_check",
       sql`${table.consumedAt} IS NULL OR ${table.consumedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      "password_reset_tokens_invalidated_at_after_created_check",
+      sql`${table.invalidatedAt} IS NULL OR ${table.invalidatedAt} >= ${table.createdAt}`,
     ),
   ],
 );

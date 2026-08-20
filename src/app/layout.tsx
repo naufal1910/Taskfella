@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Taskfella — focused work, made personal",
-  description: "The Taskfella application foundation.",
+  description: "Taskfella email and password account foundation.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

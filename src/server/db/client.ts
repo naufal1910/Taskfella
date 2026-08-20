@@ -17,7 +17,7 @@ const globalForDatabase = globalThis as typeof globalThis & {
 // Drizzle records the SHA-256 of each applied migration in its ledger. Readiness
 // is tied to the latest required migration, not to a row count or table probe.
 export const REQUIRED_MIGRATION_HASH =
-  "c97adbda91d4b513a9a80472355f31e6452a52a5651b331be8872ad20cf3e10d";
+  "8260db4d7d157793306cbe9945180fcbc09f7a26a671ab47916b33fca3a67245";
 
 export function createDatabase(
   connectionString = getEnvironment().DATABASE_URL,
@@ -47,7 +47,7 @@ export function getSql(): Sql {
 
 /**
  * Readiness requires a live PostgreSQL connection and the applied latest
- * foundation migration. A ledger table without that row is not ready.
+ * required migration. A ledger without that row is not ready.
  */
 export async function checkDatabaseReadiness(): Promise<boolean> {
   const result = await getSql()<{ migrations_ready: boolean }[]>`

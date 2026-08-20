@@ -20,7 +20,7 @@ Sessions are opaque, database-backed, account-bound, expiring, rotatable, and re
 
 `src/server/http/authentication.ts` resolves the account from the session cookie and database, and `protectedRoute` passes that account to route handlers. It never authorizes from a client-supplied account ID. Mutation boundaries call `validateCsrfRequest`, which requires a same-origin Origin (or same-origin Referer when Origin is absent) and a constant-time matching `x-csrf-token`/readable CSRF-cookie pair. `GET /api/auth/csrf` issues the cookie without returning the token in JSON.
 
-`consumeRateLimit` implements atomic fixed-window buckets in PostgreSQL with hashed operation/subject keys, bounded attempts, expiry, and a maintenance prune primitive. Presets cover login, signup, verification, reset, and OAuth failure operations without Redis or another service.
+`consumeRateLimit` implements atomic fixed-window buckets in PostgreSQL with hashed operation/subject keys, bounded attempts, expiry, and bounded pruning of expired buckets. Presets cover login, signup, verification, reset, and OAuth failure operations without Redis or another service.
 
 Authentication logs use the existing technical allow-list and record only request/correlation IDs, route metadata, status, and stable error codes. Passwords, raw bearer values, OAuth material, and user payloads are not log fields.
 

@@ -1,4 +1,5 @@
 import { hash, verify } from "@node-rs/argon2";
+import { randomBytes } from "node:crypto";
 
 /**
  * Argon2id parameters are intentionally kept in one place so password hashes
@@ -16,16 +17,25 @@ export const PASSWORD_HASH_OPTIONS = {
   outputLen: 32,
 } as const;
 
-const MAX_PASSWORD_LENGTH = 1024;
+export const MIN_PASSWORD_LENGTH = 12;
+export const MAX_PASSWORD_LENGTH = 1024;
 
-function assertPasswordInput(password: string): void {
+/**
+ * Validate without trimming or normalizing: spaces and Unicode are deliberate
+ * parts of a passphrase, not formatting to silently discard.
+ */
+export function validatePasswordInput(password: string): void {
   if (
     typeof password !== "string" ||
-    password.length === 0 ||
+    password.length < MIN_PASSWORD_LENGTH ||
     password.length > MAX_PASSWORD_LENGTH
   ) {
     throw new Error("Password input is invalid.");
   }
+}
+
+function assertPasswordInput(password: string): void {
+  validatePasswordInput(password);
 }
 
 /** Hash a password with Argon2id. The plaintext is never returned or persisted here. */
@@ -33,6 +43,11 @@ export async function hashPassword(password: string): Promise<string> {
   assertPasswordInput(password);
   return hash(password, PASSWORD_HASH_OPTIONS);
 }
+
+// Generated at process start and never returned or persisted. It keeps an
+// unknown-email login on the same Argon2 verification path without committing a
+// password or hash fixture to the repository.
+const DUMMY_PASSWORD_HASH = hashPassword(randomBytes(32).toString("base64url"));
 
 /**
  * Verify a password without exposing hash-parser or crypto errors to callers.
@@ -42,7 +57,7 @@ export async function hashPassword(password: string): Promise<string> {
 export async function verifyPassword(password: string, passwordHash: string): Promise<boolean> {
   if (
     typeof password !== "string" ||
-    password.length === 0 ||
+    password.length < MIN_PASSWORD_LENGTH ||
     password.length > MAX_PASSWORD_LENGTH ||
     typeof passwordHash !== "string" ||
     passwordHash.length === 0
@@ -55,6 +70,14 @@ export async function verifyPassword(password: string, passwordHash: string): Pr
   } catch {
     return false;
   }
+}
+
+/** Verify against stored material or a process-local dummy hash for unknown identities. */
+export async function verifyPasswordWithFallback(
+  password: string,
+  passwordHash?: string,
+): Promise<boolean> {
+  return verifyPassword(password, passwordHash ?? (await DUMMY_PASSWORD_HASH));
 }
 
 export function isPasswordHash(passwordHash: string): boolean {
