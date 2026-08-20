@@ -105,10 +105,8 @@ function serverOAuthStatus(): null {
 
 function oauthMessage(status: string | null): string | undefined {
   switch (status) {
-    case "link-required":
-      return "This Google email already has a Taskfella account. Sign in with that account, then use its explicit Link Google account action.";
     case "provider-error":
-      return "Google sign-in could not be completed. Try again or use email and password.";
+      return "Google sign-in could not be completed. Try again or sign in with your existing method, then use the explicit Link Google action from your account.";
     case "cancelled":
       return "Google sign-in was cancelled. No account was created or changed.";
     case "state-invalid":
@@ -117,6 +115,8 @@ function oauthMessage(status: string | null): string | undefined {
       return "Google sign-in is not configured here. Use email and password instead.";
     case "rate-limited":
       return "Too many Google sign-in attempts. Wait a while and try again.";
+    case "session-expired":
+      return "Your account session expired before the Google action completed. Sign in and try again.";
     default:
       return undefined;
   }

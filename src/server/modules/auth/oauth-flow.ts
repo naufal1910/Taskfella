@@ -11,6 +11,7 @@ import {
   setOAuthCookies,
   setSessionCookie,
 } from "./cookies";
+import { validateCsrfRequest } from "./csrf";
 import { completeGoogleIdentity } from "./identities";
 import {
   createGoogleCodeChallenge,
@@ -32,6 +33,7 @@ export interface OAuthFlowOptions {
   environment?: AppEnv;
   provider?: GoogleOAuthClient;
   now?: Date;
+  responseMode?: "redirect" | "json";
 }
 
 function getIntent(request: Request): OAuthIntent {
@@ -99,6 +101,13 @@ export async function startGoogleAuthorization(
   }
 
   const intent = getIntent(request);
+  if (intent === "link") {
+    if (request.method !== "POST") {
+      throw new AppError("FORBIDDEN");
+    }
+    validateCsrfRequest(request, { environment });
+  }
+  await enforceAuthRateLimits(request, options.db, "oauthStart", undefined, { environment });
   let accountId: string | undefined;
   let sessionId: string | undefined;
   if (intent === "link") {
@@ -122,7 +131,10 @@ export async function startGoogleAuthorization(
     state: ceremony.state,
     codeChallenge: createGoogleCodeChallenge(ceremony.codeVerifier),
   });
-  const response = addNoStoreHeaders(NextResponse.redirect(authorizationUrl, 302));
+  const response =
+    options.responseMode === "json"
+      ? addNoStoreHeaders(NextResponse.json({ authorizationUrl }))
+      : addNoStoreHeaders(NextResponse.redirect(authorizationUrl, 302));
   setOAuthCookies(response, ceremony.state, ceremony.codeVerifier, environment);
   return response;
 }
@@ -248,7 +260,7 @@ export async function handleGoogleCallback(
       return response;
     }
     if (result.state === "link-required") {
-      return clearAndRedirect(environment, "/login", "link-required");
+      return clearAndRedirect(environment, "/login", "provider-error");
     }
     if (result.state === "identity-conflict") {
       return clearAndRedirect(

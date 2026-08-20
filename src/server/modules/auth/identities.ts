@@ -21,6 +21,8 @@ export type GoogleIdentityResult =
     }
   | { state: "link-required" | "identity-conflict" | "email-conflict" | "session-invalid" };
 
+class BoundSessionInvalidError extends Error {}
+
 function nowOrDefault(now?: Date): Date {
   const value = now ?? new Date();
   if (!Number.isFinite(value.getTime())) {
@@ -128,18 +130,18 @@ export async function completeGoogleIdentity(
   const provider = input.transaction.provider;
   const subject = input.profile.subject;
 
-  return db.transaction(async (tx) => {
+  const transaction = db.transaction(async (tx) => {
     if (input.transaction.intent === "link") {
       if (!input.transaction.accountId || !input.transaction.sessionId) {
         return { state: "session-invalid" };
       }
 
+      const existingIdentity = await findIdentity(tx, provider, subject);
       const account = await findAccount(tx, input.transaction.accountId);
       if (!account) {
         return { state: "session-invalid" };
       }
 
-      const existingIdentity = await findIdentity(tx, provider, subject);
       if (existingIdentity && existingIdentity.accountId !== account.id) {
         return { state: "identity-conflict" };
       }
@@ -221,7 +223,10 @@ export async function completeGoogleIdentity(
         input.presentedToken,
         now,
       );
-      return session ? { state: "linked", account, session } : { state: "session-invalid" };
+      if (!session) {
+        throw new BoundSessionInvalidError();
+      }
+      return { state: "linked", account, session };
     }
 
     const existingIdentity = await findIdentity(tx, provider, subject);
@@ -313,5 +318,11 @@ export async function completeGoogleIdentity(
       now,
     });
     return { state: "created", account, session };
+  });
+  return transaction.catch((error) => {
+    if (error instanceof BoundSessionInvalidError) {
+      return { state: "session-invalid" };
+    }
+    throw error;
   });
 }

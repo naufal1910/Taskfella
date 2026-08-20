@@ -8,7 +8,7 @@ import { createAccount, setPasswordCredential } from "@/server/modules/auth/acco
 import { handleGoogleCallback, startGoogleAuthorization } from "@/server/modules/auth/oauth-flow";
 import { type GoogleIdentityProfile, type GoogleOAuthClient } from "@/server/modules/auth/google";
 import { hashBearerToken } from "@/server/modules/auth/tokens";
-import { createSession, lookupSession } from "@/server/modules/auth/sessions";
+import { createSession, lookupSession, revokeSession } from "@/server/modules/auth/sessions";
 
 const integration = process.env.DATABASE_URL ? describe : describe.skip;
 const db = process.env.DATABASE_URL ? getDatabase() : undefined;
@@ -72,10 +72,14 @@ function callbackRequest(
 function startRequest(intent: "signin" | "link", session?: string): Request {
   const url = new URL("http://localhost:3000/api/auth/google");
   if (intent === "link") url.searchParams.set("intent", "link");
+  const csrf = intent === "link" ? "csrf-test-token" : undefined;
   return new Request(url, {
+    method: intent === "link" ? "POST" : "GET",
     headers: {
       origin: "http://localhost:3000",
-      cookie: cookieHeader({ taskfella_session: session }),
+      "x-forwarded-for": `198.51.100.${(requestNumber++ % 200) + 1}`,
+      "x-csrf-token": csrf ?? "",
+      cookie: cookieHeader({ taskfella_session: session, taskfella_csrf: csrf }),
     },
   });
 }
@@ -217,7 +221,7 @@ integration("Google OAuth and explicit identity linking", () => {
       { db, environment, provider: ceremony.provider },
     );
 
-    expect(callback.headers.get("location")).toContain("/login?oauth=link-required");
+    expect(callback.headers.get("location")).toContain("/login?oauth=provider-error");
     expect(cookieValue(callback, "taskfella_session")).toBeUndefined();
     expect(await lookupSession(db, owner.session)).toMatchObject({ accountId: owner.id });
     expect(
@@ -226,6 +230,45 @@ integration("Google OAuth and explicit identity linking", () => {
         .from(oauthIdentities)
         .where(eq(oauthIdentities.providerSubject, profile.subject)),
     ).toHaveLength(0);
+  });
+
+  it("requires a same-origin CSRF-protected POST to start linking", async () => {
+    if (!db) return;
+    const owner = await accountWithPassword(uniqueEmail("csrf-link"));
+    const url = new URL("http://localhost:3000/api/auth/google?intent=link");
+    const provider = providerFor({
+      subject: `google-subject-${crypto.randomUUID()}`,
+      email: owner.email,
+    });
+
+    await expect(
+      startGoogleAuthorization(
+        new Request(url, {
+          headers: {
+            origin: "http://localhost:3000",
+            cookie: cookieHeader({ taskfella_session: owner.session }),
+          },
+        }),
+        { db, environment, provider },
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    await expect(
+      startGoogleAuthorization(
+        new Request(url, {
+          method: "POST",
+          headers: {
+            origin: "https://evil.example",
+            "x-csrf-token": "csrf-test-token",
+            cookie: cookieHeader({
+              taskfella_session: owner.session,
+              taskfella_csrf: "csrf-test-token",
+            }),
+          },
+        }),
+        { db, environment, provider },
+      ),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("links explicitly, rotates the linking session, and keeps provider subjects private", async () => {
@@ -255,6 +298,28 @@ integration("Google OAuth and explicit identity linking", () => {
       { provider: "google", createdAt: expect.any(String) },
     ]);
     expect(JSON.stringify(payload)).not.toContain(profile.subject);
+  });
+
+  it("rolls back a new identity when the bound linking session is no longer valid", async () => {
+    if (!db) return;
+    const email = uniqueEmail("expired-link");
+    const owner = await accountWithPassword(email);
+    const profile = { subject: `google-subject-${crypto.randomUUID()}`, email };
+    const ceremony = await begin("link", profile, owner.session);
+    expect(await revokeSession(db, owner.session, "test-revoked")).toBe(true);
+
+    const callback = await handleGoogleCallback(
+      callbackRequest(ceremony.state, ceremony.verifier, { session: owner.session }),
+      { db, environment, provider: ceremony.provider },
+    );
+
+    expect(callback.headers.get("location")).toContain("/login?oauth=session-expired");
+    expect(
+      await db
+        .select()
+        .from(oauthIdentities)
+        .where(eq(oauthIdentities.providerSubject, profile.subject)),
+    ).toHaveLength(0);
   });
 
   it("reports already-linked identities without replacing them", async () => {

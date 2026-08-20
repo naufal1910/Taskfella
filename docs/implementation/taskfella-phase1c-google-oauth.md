@@ -25,7 +25,7 @@ The callback uses the origin from `APP_URL`; do not add a client-supplied redire
 ## OAuth boundary
 
 - `GET /api/auth/google` starts sign-in.
-- `GET /api/auth/google?intent=link` starts an explicit link from the currently authenticated account.
+- `POST /api/auth/google?intent=link` starts an explicit link from the currently authenticated account after the existing CSRF boundary; the account page obtains the provider URL through the JSON response.
 - `GET /api/auth/google/callback` validates the ceremony and completes it.
 
 Each ceremony creates a short-lived, one-time database transaction. The state and PKCE verifier are held in Secure-in-production, HttpOnly, SameSite=Lax cookies; only SHA-256 digests are persisted. Google receives `openid email` and an S256 PKCE challenge. The token exchange requests no refresh token. The provider boundary retains only the verified Google subject and verified email in process memory.

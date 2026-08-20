@@ -142,6 +142,31 @@ export function AccountState() {
   const [pending, setPending] = useState(true);
   const [unauthenticated, setUnauthenticated] = useState(false);
   const [error, setError] = useState(false);
+  const [linkPending, setLinkPending] = useState(false);
+  const [linkError, setLinkError] = useState<string>();
+
+  async function linkGoogle(): Promise<void> {
+    setLinkPending(true);
+    setLinkError(undefined);
+    try {
+      const token = await csrfToken();
+      const response = await fetch("/api/auth/google?intent=link", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { accept: "application/json", "x-csrf-token": token },
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        authorizationUrl?: string;
+      };
+      if (!response.ok || !payload.authorizationUrl) throw new Error("link");
+      window.location.assign(payload.authorizationUrl);
+    } catch {
+      setLinkError("We could not start Google linking safely. Try again.");
+    } finally {
+      setLinkPending(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -277,9 +302,19 @@ export function AccountState() {
               Google is not linked. Start from here to authenticate with Google and explicitly add
               it to this account.
             </p>
-            <a className="secondary-action" href="/api/auth/google?intent=link">
-              Link Google account
-            </a>
+            <button
+              className="secondary-action button-action"
+              type="button"
+              onClick={() => void linkGoogle()}
+              disabled={linkPending}
+            >
+              {linkPending ? "Starting Google linking…" : "Link Google account"}
+            </button>
+            {linkError && (
+              <p className="auth-feedback feedback-error" role="alert">
+                {linkError}
+              </p>
+            )}
           </>
         )}
       </div>

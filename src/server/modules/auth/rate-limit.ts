@@ -21,6 +21,7 @@ export const AUTH_RATE_LIMITS = {
   signup: { maxAttempts: 5, windowMs: 60 * 60 * 1000 },
   emailVerification: { maxAttempts: 5, windowMs: 60 * 60 * 1000 },
   passwordReset: { maxAttempts: 5, windowMs: 60 * 60 * 1000 },
+  oauthStart: { maxAttempts: 10, windowMs: 15 * 60 * 1000 },
   oauthFailure: { maxAttempts: 10, windowMs: 15 * 60 * 1000 },
 } as const satisfies Record<string, RateLimitPolicy>;
 

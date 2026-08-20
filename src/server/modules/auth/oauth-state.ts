@@ -47,6 +47,7 @@ export async function createOAuthTransaction(
   validateIntentBinding(input);
   const now = input.now ?? new Date();
   const expiresAt = expiryFrom(now, input.ttlMs ?? OAUTH_TRANSACTION_TTL_MS);
+  await pruneExpiredOAuthTransactions(db, now);
   const state = generateOpaqueToken();
   const codeVerifier = generateOpaqueToken();
 
@@ -91,6 +92,7 @@ export async function consumeOAuthTransaction(
   },
 ): Promise<ConsumedOAuthTransaction | null> {
   const now = input.now ?? new Date();
+  await pruneExpiredOAuthTransactions(db, now);
   let stateHash: string;
   let codeVerifierHash: string;
   try {
