@@ -26,6 +26,9 @@ export const AUTH_RATE_LIMITS = {
 
 const RATE_LIMIT_PRUNE_BATCH_SIZE = 100;
 
+type RateLimitTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type RateLimitDatabase = Database | RateLimitTransaction;
+
 function validatePolicy(policy: RateLimitPolicy): void {
   if (
     !Number.isInteger(policy.maxAttempts) ||
@@ -73,12 +76,12 @@ export async function consumeRateLimit(
     throw new Error("Rate-limit timestamp is invalid.");
   }
 
-  await pruneExpiredRateLimits(db, now);
-
   const keyHash = rateLimitKey(input.operation, input.subject);
   const windowEnd = new Date(now.getTime() + policy.windowMs);
 
   return db.transaction(async (tx) => {
+    await pruneExpiredRateLimits(tx, now);
+
     await tx
       .insert(authRateLimits)
       .values({
@@ -155,7 +158,10 @@ export async function consumeRateLimit(
 }
 
 /** Remove expired buckets in a maintenance call without touching live limits. */
-export async function pruneExpiredRateLimits(db: Database, now = new Date()): Promise<number> {
+export async function pruneExpiredRateLimits(
+  db: RateLimitDatabase,
+  now = new Date(),
+): Promise<number> {
   if (!Number.isFinite(now.getTime())) {
     throw new Error("Rate-limit timestamp is invalid.");
   }

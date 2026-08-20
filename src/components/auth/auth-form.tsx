@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-
-const MIN_PASSWORD_LENGTH = 12;
-
-type AuthFormMode = "signup" | "login" | "forgot" | "reset" | "resend" | "verify";
+import {
+  type AuthFieldErrors,
+  type AuthFormMode,
+  MIN_PASSWORD_LENGTH,
+  validateAuthFields,
+} from "./validation";
 
 interface AuthFormProps {
   mode: AuthFormMode;
@@ -85,7 +87,7 @@ function errorMessage(code: string | undefined, fallback: string): string {
     case "EMAIL_NOT_VERIFIED":
       return "Verify your email address before signing in, then try again.";
     case "INVALID_REQUEST":
-      return "Check the highlighted information and try again.";
+      return "Check your information and try again.";
     default:
       return fallback;
   }
@@ -98,6 +100,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
   const router = useRouter();
   const [pending, setPending] = useState(mode === "verify" && Boolean(token));
   const [success, setSuccess] = useState<string>();
+  const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [error, setError] = useState<string | undefined>(
     mode === "verify" && !token
       ? "This verification link is missing its one-time token."
@@ -115,10 +118,12 @@ export function AuthForm({ mode, token }: AuthFormProps) {
       setPending(true);
       setError(undefined);
       setSuccess(undefined);
+      setFieldErrors({});
 
-      if (mode === "reset" && password !== confirmation) {
+      const nextFieldErrors = validateAuthFields(mode, { email, password, confirmation });
+      if (Object.keys(nextFieldErrors).length > 0) {
         setPending(false);
-        setError("The passwords do not match.");
+        setFieldErrors(nextFieldErrors);
         return;
       }
 
@@ -162,8 +167,15 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         };
 
         if (!response.ok) {
+          const apiFieldErrors =
+            payload.error?.code === "INVALID_REQUEST"
+              ? validateAuthFields(mode, { email, password, confirmation })
+              : {};
+          setFieldErrors(apiFieldErrors);
           setError(
-            errorMessage(payload.error?.code, "We could not complete that request. Try again."),
+            Object.keys(apiFieldErrors).length > 0
+              ? undefined
+              : errorMessage(payload.error?.code, "We could not complete that request. Try again."),
           );
           return;
         }
@@ -216,13 +228,31 @@ export function AuthForm({ mode, token }: AuthFormProps) {
     mode === "resend"
       ? "We will send a fresh link when the address needs verification."
       : content?.intro;
+  const hasFieldErrors = Object.keys(fieldErrors).length > 0;
+  const validationSummaryId = `${mode}-validation-summary`;
+  const emailHelpId = `${mode}-email-help`;
+  const emailErrorId = `${mode}-email-error`;
+  const passwordHelpId = `${mode}-password-help`;
+  const passwordErrorId = `${mode}-password-error`;
+  const confirmationHelpId = `${mode}-confirmation-help`;
+  const confirmationErrorId = `${mode}-confirmation-error`;
 
   return (
     <section className="auth-card" aria-labelledby={`${mode}-title`}>
       <p className="eyebrow">Taskfella account</p>
       <h1 id={`${mode}-title`}>{title}</h1>
       <p className="auth-intro">{intro}</p>
-      <form className="auth-form" onSubmit={submit} noValidate>
+      {hasFieldErrors && (
+        <p id={validationSummaryId} className="feedback-error" role="alert">
+          Please correct the highlighted fields and try again.
+        </p>
+      )}
+      <form
+        className="auth-form"
+        onSubmit={submit}
+        noValidate
+        aria-describedby={hasFieldErrors ? validationSummaryId : undefined}
+      >
         {(mode === "signup" || mode === "login" || mode === "forgot" || mode === "resend") && (
           <label className="field">
             <span>Email address</span>
@@ -234,9 +264,17 @@ export function AuthForm({ mode, token }: AuthFormProps) {
               autoComplete={mode === "login" ? "username" : "email"}
               maxLength={320}
               required
-              aria-describedby={`${mode}-email-help`}
+              aria-invalid={fieldErrors.email ? "true" : undefined}
+              aria-describedby={[emailHelpId, fieldErrors.email ? emailErrorId : undefined]
+                .filter(Boolean)
+                .join(" ")}
             />
-            <small id={`${mode}-email-help`}>Use the address associated with your account.</small>
+            <small id={emailHelpId}>Use the address associated with your account.</small>
+            {fieldErrors.email && (
+              <small id={emailErrorId} className="field-error">
+                {fieldErrors.email}
+              </small>
+            )}
           </label>
         )}
 
@@ -258,11 +296,19 @@ export function AuthForm({ mode, token }: AuthFormProps) {
               minLength={MIN_PASSWORD_LENGTH}
               maxLength={1024}
               required
-              aria-describedby={`${mode}-password-help`}
+              aria-invalid={fieldErrors.password ? "true" : undefined}
+              aria-describedby={[passwordHelpId, fieldErrors.password ? passwordErrorId : undefined]
+                .filter(Boolean)
+                .join(" ")}
             />
-            <small id={`${mode}-password-help`}>
-              Use at least {MIN_PASSWORD_LENGTH} characters. Spaces and passphrases are welcome.
+            <small id={passwordHelpId}>
+              Use at least 12 characters. Spaces and passphrases are welcome.
             </small>
+            {fieldErrors.password && (
+              <small id={passwordErrorId} className="field-error">
+                {fieldErrors.password}
+              </small>
+            )}
           </label>
         )}
 
@@ -278,7 +324,20 @@ export function AuthForm({ mode, token }: AuthFormProps) {
               minLength={MIN_PASSWORD_LENGTH}
               maxLength={1024}
               required
+              aria-invalid={fieldErrors.confirmation ? "true" : undefined}
+              aria-describedby={[
+                confirmationHelpId,
+                fieldErrors.confirmation ? confirmationErrorId : undefined,
+              ]
+                .filter(Boolean)
+                .join(" ")}
             />
+            <small id={confirmationHelpId}>Repeat the new password exactly.</small>
+            {fieldErrors.confirmation && (
+              <small id={confirmationErrorId} className="field-error">
+                {fieldErrors.confirmation}
+              </small>
+            )}
           </label>
         )}
 

@@ -657,10 +657,22 @@ h2 {
   outline-offset: 1px;
 }
 
+.field input[aria-invalid="true"] {
+  border-color: #a23b35;
+}
+
+.field input[aria-invalid="true"]:focus {
+  outline-color: rgba(162, 59, 53, 0.2);
+}
+
 .field small {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 400;
+}
+
+.field .field-error {
+  color: #a23b35;
 }
 
 .auth-submit {

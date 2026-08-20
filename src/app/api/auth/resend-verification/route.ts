@@ -31,32 +31,37 @@ export async function POST(request: Request): Promise<NextResponse> {
     const db = databaseFor(context);
     await enforceAuthRateLimits(request, db, "emailVerification", email);
 
-    await dispatchEmailWithinWindow(async () => {
-      try {
-        const account = await getAccountByNormalizedEmail(db, email);
-        const issued =
-          account && !account.emailVerifiedAt ? await issueVerificationToken(db, account.id) : null;
-        if (!issued) {
-          return;
-        }
+    const account = await getAccountByNormalizedEmail(db, email);
+    const issued =
+      account && !account.emailVerifiedAt ? await issueVerificationToken(db, account.id) : null;
 
-        const environment = context.environment ?? getEnvironment();
-        const sender = createEmailSender(environment);
-        await sender.sendVerificationEmail({
-          to: issued.account.email,
-          link: createApplicationLink("/verify-email", issued.verification.token, environment),
-          expiresAt: issued.verification.expiresAt,
-        });
-      } catch {
-        logger.error("verification_resend_dispatch_failed", {
-          requestId: context.requestId,
-          correlationId: context.correlationId,
-          status: 503,
-          errorCode: "EMAIL_DELIVERY_FAILED",
-          component: "authentication",
-        });
-      }
-    });
+    await dispatchEmailWithinWindow(
+      issued
+        ? async () => {
+            try {
+              const environment = context.environment ?? getEnvironment();
+              const sender = createEmailSender(environment);
+              await sender.sendVerificationEmail({
+                to: issued.account.email,
+                link: createApplicationLink(
+                  "/verify-email",
+                  issued.verification.token,
+                  environment,
+                ),
+                expiresAt: issued.verification.expiresAt,
+              });
+            } catch {
+              logger.error("verification_resend_dispatch_failed", {
+                requestId: context.requestId,
+                correlationId: context.correlationId,
+                status: 503,
+                errorCode: "EMAIL_DELIVERY_FAILED",
+                component: "authentication",
+              });
+            }
+          }
+        : undefined,
+    );
 
     return noStoreResponse(
       { ok: true, status: "pending", message: VERIFICATION_MESSAGE },

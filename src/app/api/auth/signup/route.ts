@@ -32,46 +32,43 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     await enforceAuthRateLimits(request, db, "signup", input.email);
 
-    await dispatchEmailWithinWindow(async () => {
-      let created;
-      try {
-        created = await createAccountWithPasswordAndVerification(db, input);
-      } catch (error) {
-        if (isUniqueConstraintViolation(error)) {
-          return;
-        }
-        logger.error("verification_message_dispatch_failed", {
-          requestId: context.requestId,
-          correlationId: context.correlationId,
-          status: 503,
-          errorCode: "EMAIL_DELIVERY_FAILED",
-          component: "authentication",
-        });
-        return;
+    let created: Awaited<ReturnType<typeof createAccountWithPasswordAndVerification>> | undefined;
+    try {
+      created = await createAccountWithPasswordAndVerification(db, input);
+    } catch (error) {
+      if (!isUniqueConstraintViolation(error)) {
+        throw error;
       }
+    }
 
-      if (!created) {
-        return;
-      }
-
-      try {
-        const environment = context.environment ?? getEnvironment();
-        const sender = createEmailSender(environment);
-        await sender.sendVerificationEmail({
-          to: created.account.email,
-          link: createApplicationLink("/verify-email", created.verification.token, environment),
-          expiresAt: created.verification.expiresAt,
-        });
-      } catch {
-        logger.error("verification_message_dispatch_failed", {
-          requestId: context.requestId,
-          correlationId: context.correlationId,
-          status: 503,
-          errorCode: "EMAIL_DELIVERY_FAILED",
-          component: "authentication",
-        });
-      }
-    });
+    const createdForEmail = created;
+    await dispatchEmailWithinWindow(
+      createdForEmail
+        ? async () => {
+            try {
+              const environment = context.environment ?? getEnvironment();
+              const sender = createEmailSender(environment);
+              await sender.sendVerificationEmail({
+                to: createdForEmail.account.email,
+                link: createApplicationLink(
+                  "/verify-email",
+                  createdForEmail.verification.token,
+                  environment,
+                ),
+                expiresAt: createdForEmail.verification.expiresAt,
+              });
+            } catch {
+              logger.error("verification_message_dispatch_failed", {
+                requestId: context.requestId,
+                correlationId: context.correlationId,
+                status: 503,
+                errorCode: "EMAIL_DELIVERY_FAILED",
+                component: "authentication",
+              });
+            }
+          }
+        : undefined,
+    );
 
     return noStoreResponse({ ok: true, status: "pending", message: SIGNUP_MESSAGE }, 202, context);
   });

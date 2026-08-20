@@ -240,6 +240,35 @@ integration("database-backed authentication foundation", () => {
     ).toBe(true);
   });
 
+  it("keeps concurrent consumption safe while pruning an expired bucket", async () => {
+    if (!db) return;
+    const subject = `rate-limit-expired-${crypto.randomUUID()}`;
+    const now = new Date("2026-03-02T00:00:00.000Z");
+    const policy = { maxAttempts: 3, windowMs: 60_000 };
+    const keyHash = rateLimitKey("login", subject);
+    await db.insert(authRateLimits).values({
+      keyHash,
+      attempts: policy.maxAttempts,
+      windowStartedAt: new Date(now.getTime() - policy.windowMs),
+      expiresAt: new Date(now.getTime() - 1),
+      updatedAt: new Date(now.getTime() - 1),
+    });
+
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 32 }, () =>
+        consumeRateLimit(db, { operation: "login", subject }, policy, now),
+      ),
+    );
+    const results = outcomes.flatMap((outcome) =>
+      outcome.status === "fulfilled" ? [outcome.value] : [],
+    );
+
+    expect(outcomes.every((outcome) => outcome.status === "fulfilled")).toBe(true);
+    expect(results.filter((result) => result.allowed)).toHaveLength(policy.maxAttempts);
+    expect(results.filter((result) => !result.allowed)).toHaveLength(32 - policy.maxAttempts);
+    await db.delete(authRateLimits).where(eq(authRateLimits.keyHash, keyHash));
+  });
+
   it("prunes expired buckets during shared rate-limit consumption", async () => {
     if (!db) return;
     const now = new Date();

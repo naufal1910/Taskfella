@@ -32,31 +32,32 @@ export async function POST(request: Request): Promise<NextResponse> {
     const db = databaseFor(context);
     await enforceAuthRateLimits(request, db, "passwordReset", email);
 
-    await dispatchEmailWithinWindow(async () => {
-      try {
-        const account = await getAccountByNormalizedEmail(db, email);
-        const issued = account ? await issuePasswordResetToken(db, account.id) : null;
-        if (!issued) {
-          return;
-        }
+    const account = await getAccountByNormalizedEmail(db, email);
+    const issued = account ? await issuePasswordResetToken(db, account.id) : null;
 
-        const environment = context.environment ?? getEnvironment();
-        const sender = createEmailSender(environment);
-        await sender.sendPasswordResetEmail({
-          to: issued.account.email,
-          link: createApplicationLink("/reset-password", issued.reset.token, environment),
-          expiresAt: issued.reset.expiresAt,
-        });
-      } catch {
-        logger.error("password_reset_message_dispatch_failed", {
-          requestId: context.requestId,
-          correlationId: context.correlationId,
-          status: 503,
-          errorCode: "EMAIL_DELIVERY_FAILED",
-          component: "authentication",
-        });
-      }
-    });
+    await dispatchEmailWithinWindow(
+      issued
+        ? async () => {
+            try {
+              const environment = context.environment ?? getEnvironment();
+              const sender = createEmailSender(environment);
+              await sender.sendPasswordResetEmail({
+                to: issued.account.email,
+                link: createApplicationLink("/reset-password", issued.reset.token, environment),
+                expiresAt: issued.reset.expiresAt,
+              });
+            } catch {
+              logger.error("password_reset_message_dispatch_failed", {
+                requestId: context.requestId,
+                correlationId: context.correlationId,
+                status: 503,
+                errorCode: "EMAIL_DELIVERY_FAILED",
+                component: "authentication",
+              });
+            }
+          }
+        : undefined,
+    );
 
     return noStoreResponse({ ok: true, status: "pending", message: RESET_MESSAGE }, 202, context);
   });
