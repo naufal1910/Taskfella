@@ -100,5 +100,14 @@ describe("Google OAuth boundary", () => {
         GOOGLE_CLIENT_SECRET: "supply-at-runtime",
       }),
     ).toThrowError(expect.objectContaining({ code: new AppError("OAUTH_NOT_CONFIGURED").code }));
+
+    expect(() =>
+      getGoogleOAuthConfig({
+        ...environment,
+        NODE_ENV: "production",
+        GOOGLE_CLIENT_ID: "123456789012-abcdefghijklmnopqrstuv.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "x",
+      }),
+    ).toThrowError(expect.objectContaining({ code: new AppError("OAUTH_NOT_CONFIGURED").code }));
   });
 });

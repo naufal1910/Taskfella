@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { AppError } from "@/server/http/errors";
-import { getEnvironment, isGoogleOAuthPlaceholder, type AppEnv } from "@/server/config/env";
+import {
+  getEnvironment,
+  isGoogleOAuthPlaceholder,
+  isSafeProductionGoogleOAuthConfiguration,
+  type AppEnv,
+} from "@/server/config/env";
 import { validateEmail } from "./accounts";
 
 export const GOOGLE_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -56,7 +61,11 @@ export function getGoogleOAuthConfig(
     !validGoogleClientId(environment.GOOGLE_CLIENT_ID) ||
     !validGoogleClientSecret(environment.GOOGLE_CLIENT_SECRET) ||
     (environment.NODE_ENV === "production" &&
-      (isGoogleOAuthPlaceholder(environment.GOOGLE_CLIENT_ID) ||
+      (!isSafeProductionGoogleOAuthConfiguration(
+        environment.GOOGLE_CLIENT_ID,
+        environment.GOOGLE_CLIENT_SECRET,
+      ) ||
+        isGoogleOAuthPlaceholder(environment.GOOGLE_CLIENT_ID) ||
         isGoogleOAuthPlaceholder(environment.GOOGLE_CLIENT_SECRET)))
   ) {
     throw new AppError("OAUTH_NOT_CONFIGURED");

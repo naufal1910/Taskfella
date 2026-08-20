@@ -86,16 +86,16 @@ describe("environment validation", () => {
         EMAIL_SMTP_HOST: "smtp.example",
         EMAIL_FROM: "Taskfella <no-reply@example>",
         EMAIL_SMTP_SECURE: "true",
-        GOOGLE_CLIENT_ID: "1234567890-abcXYZ.apps.googleusercontent.com",
-        GOOGLE_CLIENT_SECRET: "GOCSPX-9aB7cD2eF4gH6jK8mN0pQ",
+        GOOGLE_CLIENT_ID: "123456789012-abcdefghijklmnopqrstuv.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "GOCSPX-9aB7cD2eF4gH6jK8mN0pQrstuv",
       }),
     ).toMatchObject({
       EMAIL_DELIVERY_MODE: "smtp",
       EMAIL_SMTP_HOST: "smtp.example",
       EMAIL_SMTP_SECURE: true,
       AUTH_TRUSTED_PROXY: true,
-      GOOGLE_CLIENT_ID: "1234567890-abcXYZ.apps.googleusercontent.com",
-      GOOGLE_CLIENT_SECRET: "GOCSPX-9aB7cD2eF4gH6jK8mN0pQ",
+      GOOGLE_CLIENT_ID: "123456789012-abcdefghijklmnopqrstuv.apps.googleusercontent.com",
+      GOOGLE_CLIENT_SECRET: "GOCSPX-9aB7cD2eF4gH6jK8mN0pQrstuv",
     });
   });
 
@@ -118,6 +118,14 @@ describe("environment validation", () => {
         NODE_ENV: "production",
         GOOGLE_CLIENT_ID: "your-client-id.apps.googleusercontent.com",
         GOOGLE_CLIENT_SECRET: "supply-at-runtime",
+      }),
+    ).toThrow(/GOOGLE/);
+    expect(() =>
+      parseEnvironment({
+        ...base,
+        NODE_ENV: "production",
+        GOOGLE_CLIENT_ID: "123456789012-abcdefghijklmnopqrstuv.apps.googleusercontent.com",
+        GOOGLE_CLIENT_SECRET: "x",
       }),
     ).toThrow(/GOOGLE/);
     expect(() =>

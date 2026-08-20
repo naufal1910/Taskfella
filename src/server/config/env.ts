@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+const PRODUCTION_GOOGLE_CLIENT_ID_PATTERN =
+  /^\d{10,}(?:-[A-Za-z0-9_-]{8,})?\.apps\.googleusercontent\.com$/;
+const PRODUCTION_GOOGLE_CLIENT_SECRET_MIN_LENGTH = 16;
+
 const environmentSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -142,6 +146,15 @@ const environmentSchema = z
         message: "production Google OAuth configuration cannot use placeholders",
       });
     }
+    if (
+      !isSafeProductionGoogleOAuthConfiguration(value.GOOGLE_CLIENT_ID, value.GOOGLE_CLIENT_SECRET)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+        message: "production Google OAuth credentials do not meet safety requirements",
+      });
+    }
   });
 
 export function isGoogleOAuthPlaceholder(value: string | undefined): boolean {
@@ -150,6 +163,18 @@ export function isGoogleOAuthPlaceholder(value: string | undefined): boolean {
     /(?:replace-with-|placeholder|local-google|your-client-id|supply-at-runtime|(?:^|[-_.])(example|dummy|fake|sample|changeme|test)(?:$|[-_.]))/i.test(
       value,
     ),
+  );
+}
+
+export function isSafeProductionGoogleOAuthConfiguration(
+  clientId: string | undefined,
+  clientSecret: string | undefined,
+): boolean {
+  return Boolean(
+    clientId &&
+    PRODUCTION_GOOGLE_CLIENT_ID_PATTERN.test(clientId) &&
+    clientSecret &&
+    clientSecret.length >= PRODUCTION_GOOGLE_CLIENT_SECRET_MIN_LENGTH,
   );
 }
 
