@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, inArray, lte } from "drizzle-orm";
+import { and, eq, gt, inArray, lte, sql } from "drizzle-orm";
 import { type Database } from "@/server/db/client";
 import { authRateLimits } from "@/server/db/schema";
 import { AppError } from "@/server/http/errors";
@@ -81,7 +81,7 @@ export async function consumeRateLimit(
   const windowEnd = new Date(now.getTime() + policy.windowMs);
 
   return db.transaction(async (tx) => {
-    await tx
+    const [current] = await tx
       .insert(authRateLimits)
       .values({
         keyHash,
@@ -90,36 +90,31 @@ export async function consumeRateLimit(
         expiresAt: windowEnd,
         updatedAt: now,
       })
-      .onConflictDoNothing({ target: authRateLimits.keyHash });
-
-    const [current] = await tx
-      .select()
-      .from(authRateLimits)
-      .where(eq(authRateLimits.keyHash, keyHash))
-      .for("update");
+      .onConflictDoUpdate({
+        target: authRateLimits.keyHash,
+        set: { keyHash: sql`${authRateLimits.keyHash}` },
+      })
+      .returning();
 
     if (!current) {
       throw new Error("Rate-limit state could not be read.");
     }
 
-    const expired = current.expiresAt.getTime() <= now.getTime();
-    if (expired) {
-      await tx
-        .update(authRateLimits)
-        .set({
-          attempts: 1,
-          windowStartedAt: now,
-          expiresAt: windowEnd,
-          updatedAt: now,
-        })
-        .where(eq(authRateLimits.keyHash, keyHash));
-    }
+    const [reset] = await tx
+      .update(authRateLimits)
+      .set({
+        attempts: 1,
+        windowStartedAt: now,
+        expiresAt: windowEnd,
+        updatedAt: now,
+      })
+      .where(and(eq(authRateLimits.keyHash, keyHash), lte(authRateLimits.expiresAt, now)))
+      .returning();
 
-    // Lock and refresh the requested bucket before pruning so concurrent
-    // callers cannot prune the row they are about to consume.
-    await pruneExpiredRateLimits(tx, now);
-
-    if (expired) {
+    if (reset) {
+      // Refresh the requested bucket before pruning so concurrent callers
+      // cannot prune the row they are about to consume.
+      await pruneExpiredRateLimits(tx, now);
       return {
         allowed: true,
         limit: policy.maxAttempts,
@@ -128,38 +123,59 @@ export async function consumeRateLimit(
       };
     }
 
-    if (current.attempts >= policy.maxAttempts) {
+    const [consumed] = await tx
+      .update(authRateLimits)
+      .set({
+        attempts: sql`${authRateLimits.attempts} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(authRateLimits.keyHash, keyHash),
+          gt(authRateLimits.expiresAt, now),
+          lte(authRateLimits.attempts, policy.maxAttempts - 1),
+        ),
+      )
+      .returning();
+
+    if (consumed) {
+      await pruneExpiredRateLimits(tx, now);
+      return {
+        allowed: true,
+        limit: policy.maxAttempts,
+        remaining: policy.maxAttempts - consumed.attempts,
+        retryAfterSeconds: Math.max(
+          1,
+          Math.ceil((consumed.expiresAt.getTime() - now.getTime()) / 1000),
+        ),
+      };
+    }
+
+    const [latest] = await tx
+      .select()
+      .from(authRateLimits)
+      .where(eq(authRateLimits.keyHash, keyHash))
+      .for("update");
+
+    if (!latest) {
+      throw new Error("Rate-limit state could not be read.");
+    }
+
+    await pruneExpiredRateLimits(tx, now);
+
+    if (latest.attempts >= policy.maxAttempts) {
       return {
         allowed: false,
         limit: policy.maxAttempts,
         remaining: 0,
         retryAfterSeconds: Math.max(
           1,
-          Math.ceil((current.expiresAt.getTime() - now.getTime()) / 1000),
+          Math.ceil((latest.expiresAt.getTime() - now.getTime()) / 1000),
         ),
       };
     }
 
-    const attempts = current.attempts + 1;
-    await tx
-      .update(authRateLimits)
-      .set({ attempts, updatedAt: now })
-      .where(
-        and(
-          eq(authRateLimits.keyHash, keyHash),
-          lte(authRateLimits.attempts, policy.maxAttempts - 1),
-        ),
-      );
-
-    return {
-      allowed: true,
-      limit: policy.maxAttempts,
-      remaining: policy.maxAttempts - attempts,
-      retryAfterSeconds: Math.max(
-        1,
-        Math.ceil((current.expiresAt.getTime() - now.getTime()) / 1000),
-      ),
-    };
+    throw new Error("Rate-limit state could not be consumed.");
   });
 }
 
