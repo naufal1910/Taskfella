@@ -100,7 +100,7 @@ integration("Phase 1D account settings routes", () => {
     );
     expect(updated.status).toBe(200);
     expect(updated.headers.get("cache-control")).toBe("no-store");
-    expect(updated.headers.get("set-cookie")).toContain("taskfella_appearance=dark");
+    expect(updated.headers.get("set-cookie")).toBeNull();
     expect(await json(updated)).toMatchObject({
       account: {
         displayName: "Focused owner",

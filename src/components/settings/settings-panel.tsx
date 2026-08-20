@@ -8,6 +8,8 @@ import {
   notifyAppearanceChange,
   type AppearancePreference,
 } from "@/components/theme/theme";
+import { createAppearanceMutationTracker } from "@/shared/appearance-mutation";
+import { enqueue } from "@/shared/async";
 import { isValidTimezone } from "@/shared/timezone";
 
 const POMODORO_LIMITS = {
@@ -167,10 +169,11 @@ function readCookie(name: string): string | undefined {
   }
 }
 
-async function csrfToken(): Promise<string> {
+async function csrfToken(signal: AbortSignal): Promise<string> {
   const response = await fetch("/api/auth/csrf", {
     credentials: "same-origin",
     cache: "no-store",
+    signal,
   });
   if (!response.ok) throw new Error("csrf");
   const token = readCookie("taskfella_csrf");
@@ -226,13 +229,27 @@ export function SettingsPanel() {
     typeof window === "undefined" ? undefined : detectBrowserTimezone(),
   );
   const [pendingSections, setPendingSections] = useState<ReadonlySet<Section>>(() => new Set());
-  const appearanceMutationRef = useRef(0);
+  const appearanceMutationTrackerRef = useRef(createAppearanceMutationTracker());
+  const appearanceSaveTailRef = useRef(Promise.resolve());
+  const saveControllersRef = useRef(new Set<AbortController>());
   const appliedAppearanceRef = useRef<AppearancePreference | undefined>(undefined);
   const [status, setStatus] = useState<string>();
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [unauthenticated, setUnauthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const mutationTracker = appearanceMutationTrackerRef.current;
+    const saveControllers = saveControllersRef.current;
+    return () => {
+      mutationTracker.advance();
+      for (const controller of saveControllers) controller.abort();
+      if (appliedAppearanceRef.current) {
+        notifyAppearanceChange(appliedAppearanceRef.current);
+      }
+    };
+  }, []);
 
   function setSectionPending(section: Section, pending: boolean): void {
     setPendingSections((current) => {
@@ -272,76 +289,110 @@ export function SettingsPanel() {
   }, []);
 
   function changeValue<K extends keyof SettingsValues>(key: K, value: SettingsValues[K]): void {
+    if (key === "appearance") {
+      appearanceMutationTrackerRef.current.advance();
+      notifyAppearanceChange(value as AppearancePreference);
+    }
     setValues((current) => (current ? { ...current, [key]: value } : current));
     setStatus(undefined);
     setError(undefined);
     setFieldErrors((current) => ({ ...current, [key]: undefined }));
   }
 
+  function invalidatePendingSaves(): void {
+    appearanceMutationTrackerRef.current.advance();
+    for (const controller of saveControllersRef.current) controller.abort();
+  }
+
   async function save(section: Section, patch: Record<string, unknown>): Promise<void> {
     const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
     const appearanceMutationId = appearancePatch
-      ? ++appearanceMutationRef.current
-      : appearanceMutationRef.current;
-    setSectionPending(section, true);
+      ? appearanceMutationTrackerRef.current.advance()
+      : undefined;
     setStatus(undefined);
     setError(undefined);
-    try {
-      const response = await fetch("/api/account", {
-        method: "PATCH",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": await csrfToken(),
-        },
-        body: JSON.stringify(patch),
-      });
-      const payload = (await response.json().catch(() => ({}))) as {
-        account?: AccountPayload;
-        error?: ApiError;
-      };
-      if (response.status === 401) {
-        setUnauthenticated(true);
+    const execute = async (): Promise<void> => {
+      if (
+        appearancePatch &&
+        appearanceMutationId !== undefined &&
+        !appearanceMutationTrackerRef.current.isCurrent(appearanceMutationId)
+      ) {
         return;
       }
-      if (!response.ok || !payload.account) {
-        if (payload.error?.code === "INVALID_REQUEST") {
-          throw new Error("validation");
+
+      const controller = new AbortController();
+      saveControllersRef.current.add(controller);
+      setSectionPending(section, true);
+      try {
+        const response = await fetch("/api/account", {
+          method: "PATCH",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": await csrfToken(controller.signal),
+          },
+          signal: controller.signal,
+          body: JSON.stringify(patch),
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          account?: AccountPayload;
+          error?: ApiError;
+        };
+        if (response.status === 401) {
+          invalidatePendingSaves();
+          setUnauthenticated(true);
+          return;
         }
-        throw new Error("save");
-      }
-      setAccount(payload.account);
-      setValues((current) =>
-        current
-          ? valuesAfterSave(current, payload.account!, patch)
-          : valuesFromAccount(payload.account!),
-      );
-      setFieldErrors((current) => {
-        const next = { ...current };
-        for (const key of PATCHED_SETTINGS_KEYS) {
-          if (Object.prototype.hasOwnProperty.call(patch, key)) delete next[key];
+        if (!response.ok || !payload.account) {
+          if (payload.error?.code === "INVALID_REQUEST") {
+            throw new Error("validation");
+          }
+          throw new Error("save");
         }
-        return next;
-      });
-      setStatus("Saved.");
-      if (appearancePatch) {
-        const preference = payload.account.appearance ?? "system";
-        if (appearanceMutationId === appearanceMutationRef.current) {
+        setAccount(payload.account);
+        setValues((current) =>
+          current
+            ? valuesAfterSave(current, payload.account!, patch)
+            : valuesFromAccount(payload.account!),
+        );
+        setFieldErrors((current) => {
+          const next = { ...current };
+          for (const key of PATCHED_SETTINGS_KEYS) {
+            if (Object.prototype.hasOwnProperty.call(patch, key)) delete next[key];
+          }
+          return next;
+        });
+        setStatus("Saved.");
+        if (
+          appearancePatch &&
+          appearanceMutationId !== undefined &&
+          appearanceMutationTrackerRef.current.isCurrent(appearanceMutationId)
+        ) {
+          const preference = payload.account.appearance ?? "system";
           appliedAppearanceRef.current = preference;
+          cacheAppearancePreference(preference);
+          notifyAppearanceChange(preference);
         }
-        const appliedPreference = appliedAppearanceRef.current ?? preference;
-        cacheAppearancePreference(appliedPreference);
-        notifyAppearanceChange(appliedPreference);
+      } catch (caught) {
+        if (controller.signal.aborted) return;
+        setError(
+          caught instanceof Error && caught.message === "validation"
+            ? "Check the highlighted values and try again."
+            : errorText(caught),
+        );
+      } finally {
+        saveControllersRef.current.delete(controller);
+        setSectionPending(section, false);
       }
-    } catch (caught) {
-      setError(
-        caught instanceof Error && caught.message === "validation"
-          ? "Check the highlighted values and try again."
-          : errorText(caught),
-      );
-    } finally {
-      setSectionPending(section, false);
+    };
+
+    if (appearancePatch) {
+      const queued = enqueue(appearanceSaveTailRef.current, execute);
+      appearanceSaveTailRef.current = queued.tail;
+      await queued.result;
+    } else {
+      await execute();
     }
   }
 
