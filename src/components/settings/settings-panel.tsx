@@ -253,7 +253,12 @@ export function SettingsPanel() {
       for (const controller of saveControllers) controller.abort();
       const savedAppearance = mutationTracker.getSaved();
       if (savedAppearance) {
-        notifyAppearanceChange(savedAppearance, savedAppearanceRevisionRef.current);
+        const savedRevision = savedAppearanceRevisionRef.current;
+        notifyAppearanceChange(
+          savedAppearance,
+          savedRevision,
+          savedRevision === APPEARANCE_RESET_REVISION ? { reset: true } : { authenticated: true },
+        );
       }
     };
   }, []);
@@ -274,7 +279,9 @@ export function SettingsPanel() {
         if (!active) return;
         if (response.status === 401) {
           clearAppearancePreferenceCache();
-          notifyAppearanceChange("system", APPEARANCE_RESET_REVISION);
+          appearanceMutationTrackerRef.current.recordSaved("system");
+          savedAppearanceRevisionRef.current = APPEARANCE_RESET_REVISION;
+          notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, { reset: true });
           setUnauthenticated(true);
           return;
         }
@@ -286,7 +293,9 @@ export function SettingsPanel() {
         const preference = payload.account.appearance ?? "system";
         savedAppearanceRevisionRef.current = payload.account.appearanceRevision;
         appearanceMutationTrackerRef.current.recordSaved(preference);
-        notifyAppearanceChange(preference, savedAppearanceRevisionRef.current);
+        notifyAppearanceChange(preference, savedAppearanceRevisionRef.current, {
+          authenticated: true,
+        });
       })
       .catch(() => {
         if (active) setError("We could not load your settings. Try again.");
@@ -354,7 +363,9 @@ export function SettingsPanel() {
         if (response.status === 401) {
           invalidatePendingSaves();
           clearAppearancePreferenceCache();
-          notifyAppearanceChange("system", APPEARANCE_RESET_REVISION);
+          appearanceMutationTrackerRef.current.recordSaved("system");
+          savedAppearanceRevisionRef.current = APPEARANCE_RESET_REVISION;
+          notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, { reset: true });
           setUnauthenticated(true);
           return;
         }
@@ -399,7 +410,9 @@ export function SettingsPanel() {
               appearanceMutationId !== undefined &&
               appearanceMutationTrackerRef.current.isCurrent(appearanceMutationId)
             ) {
-              notifyAppearanceChange(preference, savedAppearanceRevisionRef.current);
+              notifyAppearanceChange(preference, savedAppearanceRevisionRef.current, {
+                authenticated: true,
+              });
             }
           }
         }

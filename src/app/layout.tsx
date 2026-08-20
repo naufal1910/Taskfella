@@ -42,7 +42,7 @@ async function resolveInitialAppearance(): Promise<InitialAppearance> {
   return { preference: cached ?? "system", authenticated: false, revision: cachedRevision };
 }
 
-function themeBootstrap(initialAppearance: InitialAppearance): string {
+export function themeBootstrap(initialAppearance: InitialAppearance): string {
   return `
 (function () {
   try {

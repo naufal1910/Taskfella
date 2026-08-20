@@ -161,6 +161,7 @@ async function update(request: Request): Promise<NextResponse> {
           syncAppearanceCookie: appearancePatch,
           appearanceRevision,
         });
+
       },
       { mutation: true },
     );

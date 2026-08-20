@@ -1,4 +1,6 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
+import { themeBootstrap } from "@/app/layout";
 import {
   APPEARANCE_CHANGE_EVENT,
   compareAppearanceRevisions,
@@ -8,6 +10,35 @@ import {
 } from "@/components/theme/theme";
 
 describe("appearance resolution", () => {
+  function runBootstrap(
+    initialAppearance: { preference: "system" | "light" | "dark"; authenticated: boolean },
+    cookie: string,
+    systemDark: boolean,
+  ): { theme: string; colorScheme: string } {
+    const root = { dataset: {} as Record<string, string>, style: { colorScheme: "" } };
+    runInNewContext(themeBootstrap(initialAppearance), {
+      document: { cookie, documentElement: root },
+      window: { matchMedia: () => ({ matches: systemDark }) },
+    });
+    return { theme: root.dataset.theme, colorScheme: root.style.colorScheme };
+  }
+
+  it("uses the authenticated server preference before first paint", () => {
+    expect(
+      runBootstrap(
+        { preference: "dark", authenticated: true },
+        "taskfella_appearance=light",
+        false,
+      ),
+    ).toEqual({ theme: "dark", colorScheme: "dark" });
+  });
+
+  it("resolves invalid public cache data through the system preference", () => {
+    expect(
+      runBootstrap({ preference: "system", authenticated: false }, "taskfella_appearance=%", true),
+    ).toEqual({ theme: "dark", colorScheme: "dark" });
+  });
+
   it("uses the system preference only for System", () => {
     expect(resolveAppearance("system", true)).toBe("dark");
     expect(resolveAppearance("system", false)).toBe("light");
@@ -32,7 +63,12 @@ describe("appearance resolution", () => {
 
     try {
       notifyAppearanceChange("dark", "42");
-      expect(received).toEqual({ preference: "dark", revision: "42" });
+      expect(received).toEqual({
+        preference: "dark",
+        revision: "42",
+        authenticated: false,
+        reset: false,
+      });
     } finally {
       if (previousWindow === undefined) {
         Reflect.deleteProperty(globalThis, "window");

@@ -6,7 +6,7 @@ import { logger } from "@/server/observability/logger";
 import { getSessionToken } from "@/server/modules/auth/cookies";
 import { validateCsrfRequest } from "@/server/modules/auth/csrf";
 import { lookupSession, type AuthenticatedSession } from "@/server/modules/auth/sessions";
-import { getAccountById, getAccountVersion } from "@/server/modules/auth/accounts";
+import { getAccountWithVersion } from "@/server/modules/auth/accounts";
 import { appErrorResponse, AppError } from "./errors";
 import { applyRequestContext, getRequestContext } from "./request-id";
 
@@ -35,17 +35,16 @@ export async function resolveAuthenticatedAccount(
     return null;
   }
 
-  const account = await getAccountById(db, session.accountId);
-  if (!account) {
+  const accountWithVersion = await getAccountWithVersion(db, session.accountId);
+  if (!accountWithVersion) {
     return null;
   }
 
-  const accountVersion = await getAccountVersion(db, account.id);
-  if (!accountVersion) {
-    return null;
-  }
-
-  return { account, session, accountVersion };
+  return {
+    account: accountWithVersion.account,
+    session,
+    accountVersion: accountWithVersion.version,
+  };
 }
 
 export async function requireAuthenticatedAccount(

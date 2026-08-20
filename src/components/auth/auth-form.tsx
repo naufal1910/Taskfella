@@ -498,6 +498,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           notifyAppearanceChange(
             mode === "login" ? (payload.account?.appearance ?? "system") : "system",
             mode === "login" ? payload.account?.appearanceRevision : APPEARANCE_RESET_REVISION,
+            mode === "login" ? { authenticated: true } : { reset: true },
           );
         }
         if (mode === "login") {

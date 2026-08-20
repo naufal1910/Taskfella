@@ -69,7 +69,7 @@ function LogoutControl() {
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
       clearAppearancePreferenceCache();
-      notifyAppearanceChange("system", APPEARANCE_RESET_REVISION);
+      notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, { reset: true });
       setMessage("You are signed out.");
       router.push("/login");
     } catch {
@@ -188,7 +188,7 @@ export function AccountState() {
         if (!active) return;
         if (response.status === 401) {
           clearAppearancePreferenceCache();
-          notifyAppearanceChange("system", APPEARANCE_RESET_REVISION);
+          notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, { reset: true });
           setUnauthenticated(true);
           return;
         }
@@ -199,6 +199,7 @@ export function AccountState() {
         notifyAppearanceChange(
           payload.account.appearance ?? "system",
           payload.account.appearanceRevision,
+          { authenticated: true },
         );
       })
       .catch(() => {

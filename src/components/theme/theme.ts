@@ -11,7 +11,11 @@ export { detectBrowserTimezone } from "@/shared/timezone";
 let cachedAppearancePreference: AppearancePreference | undefined;
 let cachedAppearanceRevision: string | undefined;
 
-export function notifyAppearanceChange(preference: AppearancePreference, revision?: string): void {
+export function notifyAppearanceChange(
+  preference: AppearancePreference,
+  revision?: string,
+  options: { authenticated?: boolean; reset?: boolean } = {},
+): void {
   if (
     revision &&
     (revision === APPEARANCE_RESET_REVISION ||
@@ -24,7 +28,12 @@ export function notifyAppearanceChange(preference: AppearancePreference, revisio
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent(APPEARANCE_CHANGE_EVENT, {
-        detail: { preference, revision },
+        detail: {
+          preference,
+          revision,
+          authenticated: options.authenticated === true,
+          reset: options.reset === true,
+        },
       }),
     );
   }

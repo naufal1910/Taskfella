@@ -40,7 +40,7 @@ export function LogoutForm() {
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
       clearAppearancePreferenceCache();
-      notifyAppearanceChange("system", APPEARANCE_RESET_REVISION);
+      notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, { reset: true });
       setMessage("You are signed out. The session cookie was cleared.");
     } catch {
       setMessageTone("error");
