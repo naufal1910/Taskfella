@@ -19,7 +19,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit tests/smoke",
-    "test:integration": "tsx scripts/check-database.ts && vitest run tests/integration",
+    "test:integration": "tsx scripts/check-database.ts && vitest run tests/integration --no-file-parallelism",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:check": "tsx scripts/check-database.ts",

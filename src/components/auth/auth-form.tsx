@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
@@ -82,6 +89,37 @@ async function getCsrfToken(): Promise<string> {
     throw new Error("csrf");
   }
   return token;
+}
+
+function subscribeToLocation(): () => void {
+  return () => undefined;
+}
+
+function currentOAuthStatus(): string | null {
+  return new URLSearchParams(window.location.search).get("oauth");
+}
+
+function serverOAuthStatus(): null {
+  return null;
+}
+
+function oauthMessage(status: string | null): string | undefined {
+  switch (status) {
+    case "provider-error":
+      return "Google sign-in could not be completed. Try again or sign in with your existing method, then use the explicit Link Google action from your account.";
+    case "cancelled":
+      return "Google sign-in was cancelled. No account was created or changed.";
+    case "state-invalid":
+      return "That Google sign-in request expired or was already used. Start again.";
+    case "not-configured":
+      return "Google sign-in is not configured here. Use email and password instead.";
+    case "rate-limited":
+      return "Too many Google sign-in attempts. Wait a while and try again.";
+    case "session-expired":
+      return "Your account session expired before the Google action completed. Sign in and try again.";
+    default:
+      return undefined;
+  }
 }
 
 export function authErrorMessage(
@@ -320,6 +358,11 @@ export function AuthForm({ mode, token }: AuthFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const oauthStatus = useSyncExternalStore(
+    subscribeToLocation,
+    currentOAuthStatus,
+    serverOAuthStatus,
+  );
   const router = useRouter();
   const [pending, setPending] = useState(mode === "verify" && Boolean(token));
   const [accepted, setAccepted] = useState<string>();
@@ -680,7 +723,20 @@ export function AuthForm({ mode, token }: AuthFormProps) {
                     : "Send fresh link"}
         </button>
       </form>
-      <AuthFeedback pending={pending} accepted={accepted} success={success} error={error} />
+      {(mode === "login" || mode === "signup") && (
+        <div className="oauth-choice">
+          <span>or</span>
+          <a className="secondary-action" href="/api/auth/google">
+            Continue with Google
+          </a>
+        </div>
+      )}
+      <AuthFeedback
+        pending={pending}
+        accepted={accepted}
+        success={success}
+        error={oauthMessage(oauthStatus) ?? error}
+      />
       <div className="auth-links">
         {mode === "signup" && (
           <>

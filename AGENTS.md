@@ -8,8 +8,8 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - `README.md` is the contributor quick start and command reference.
 - `DESIGN.md` is the canonical visual contract; its validator command and zero-error/zero-warning requirement are documented in `CONTRIBUTING.md`.
-- `docs/implementation/taskfella-analysis.md` is the approved phased implementation plan; `docs/implementation/taskfella-phase1a-auth.md` and `docs/implementation/taskfella-phase1b-auth.md` record the authentication security decisions.
-- `src/server/db/schema.ts` and ordered `drizzle/` migrations are the source of truth for Phase 1A/1B authentication tables.
+- `docs/implementation/taskfella-analysis.md` is the approved phased implementation plan; `docs/implementation/taskfella-phase1a-auth.md`, `docs/implementation/taskfella-phase1b-auth.md`, and `docs/implementation/taskfella-phase1c-google-oauth.md` record the authentication security and OAuth/linking decisions.
+- `src/server/db/schema.ts` and ordered `drizzle/` migrations are the source of truth for the Phase 1A/1B/1C authentication and OAuth-ceremony tables.
 - `GET /api/health` is the executable readiness contract; `pnpm db:migrate` must run before a healthy response is expected, including after a new migration.
 - Keep the application as a modular monolith. Do not add services, queues, caches, or deployment layers for later-phase behavior during foundation work.
 

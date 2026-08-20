@@ -114,6 +114,45 @@ export const sessions = pgTable(
   ],
 );
 
+export const oauthTransactions = pgTable(
+  "oauth_transactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    provider: text("provider").notNull(),
+    stateHash: text("state_hash").notNull(),
+    codeVerifierHash: text("code_verifier_hash").notNull(),
+    intent: text("intent").notNull(),
+    accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id").references(() => sessions.id, { onDelete: "cascade" }),
+    expiresAt: utcTimestamp("expires_at").notNull(),
+    consumedAt: utcTimestamp("consumed_at"),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("oauth_transactions_state_hash_unique").on(table.stateHash),
+    index("oauth_transactions_expiry_idx").on(table.expiresAt),
+    check("oauth_transactions_provider_not_empty_check", sql`length(${table.provider}) > 0`),
+    check("oauth_transactions_state_hash_not_empty_check", sql`length(${table.stateHash}) > 0`),
+    check(
+      "oauth_transactions_code_verifier_hash_not_empty_check",
+      sql`length(${table.codeVerifierHash}) > 0`,
+    ),
+    check("oauth_transactions_intent_check", sql`${table.intent} IN ('signin', 'link')`),
+    check(
+      "oauth_transactions_expires_after_created_check",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      "oauth_transactions_consumed_at_after_created_check",
+      sql`${table.consumedAt} IS NULL OR ${table.consumedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      "oauth_transactions_link_binding_check",
+      sql`${table.intent} = 'signin' OR (${table.accountId} IS NOT NULL AND ${table.sessionId} IS NOT NULL)`,
+    ),
+  ],
+);
+
 export const emailVerificationTokens = pgTable(
   "email_verification_tokens",
   {
@@ -217,6 +256,7 @@ export const foundationSchema = {
   passwordCredentials,
   oauthIdentities,
   sessions,
+  oauthTransactions,
   emailVerificationTokens,
   passwordResetTokens,
   authRateLimits,
@@ -227,6 +267,7 @@ export type NewAccount = typeof accounts.$inferInsert;
 export type PasswordCredential = typeof passwordCredentials.$inferSelect;
 export type OAuthIdentity = typeof oauthIdentities.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
+export type OAuthTransaction = typeof oauthTransactions.$inferSelect;
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type AuthRateLimit = typeof authRateLimits.$inferSelect;

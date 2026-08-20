@@ -1,10 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import { PendingFeedback } from "./pending-feedback";
+
+interface AccountIdentity {
+  provider: string;
+  createdAt: string;
+}
 
 interface AccountPayload {
   id: string;
@@ -12,6 +17,7 @@ interface AccountPayload {
   emailVerifiedAt: string | null;
   createdAt: string;
   status: "verified" | "unverified";
+  identities: AccountIdentity[];
 }
 
 function csrfCookie(): string | undefined {
@@ -89,11 +95,78 @@ function LogoutControl() {
   );
 }
 
+function subscribeToLocation(): () => void {
+  return () => undefined;
+}
+
+function currentOAuthStatus(): string | null {
+  return new URLSearchParams(window.location.search).get("oauth");
+}
+
+function serverOAuthStatus(): null {
+  return null;
+}
+
+function oauthMessage(status: string | null): string | undefined {
+  switch (status) {
+    case "success":
+      return "Google sign-in succeeded. Your session was renewed.";
+    case "linked":
+      return "Google is now linked to this Taskfella account. Your session was renewed.";
+    case "already-linked":
+      return "That Google identity is already linked to this account. Your session was renewed.";
+    case "conflict":
+      return "That Google identity is linked to another Taskfella account. Nothing was changed.";
+    case "email-conflict":
+      return "That Google email belongs to another Taskfella account. Nothing was changed.";
+    case "session-expired":
+      return "Your account session expired before linking completed. Sign in and try again.";
+    case "provider-error":
+      return "Google sign-in could not be completed. Try again without changing your account.";
+    case "cancelled":
+      return "Google sign-in was cancelled. No account changes were made.";
+    case "rate-limited":
+      return "Too many Google sign-in attempts. Wait a while and try again.";
+    default:
+      return undefined;
+  }
+}
+
 export function AccountState() {
+  const oauthStatus = useSyncExternalStore(
+    subscribeToLocation,
+    currentOAuthStatus,
+    serverOAuthStatus,
+  );
   const [account, setAccount] = useState<AccountPayload>();
   const [pending, setPending] = useState(true);
   const [unauthenticated, setUnauthenticated] = useState(false);
   const [error, setError] = useState(false);
+  const [linkPending, setLinkPending] = useState(false);
+  const [linkError, setLinkError] = useState<string>();
+
+  async function linkGoogle(): Promise<void> {
+    setLinkPending(true);
+    setLinkError(undefined);
+    try {
+      const token = await csrfToken();
+      const response = await fetch("/api/auth/google?intent=link", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { accept: "application/json", "x-csrf-token": token },
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        authorizationUrl?: string;
+      };
+      if (!response.ok || !payload.authorizationUrl) throw new Error("link");
+      window.location.assign(payload.authorizationUrl);
+    } catch {
+      setLinkError("We could not start Google linking safely. Try again.");
+    } finally {
+      setLinkPending(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -184,11 +257,23 @@ export function AccountState() {
     );
   }
 
+  const googleIdentity = account.identities.find((identity) => identity.provider === "google");
+  const statusMessage = oauthMessage(oauthStatus);
+  const statusTone =
+    oauthStatus === "success" || oauthStatus === "linked" || oauthStatus === "already-linked"
+      ? "feedback-success"
+      : "feedback-error";
+
   return (
     <section className="auth-card" aria-labelledby="account-title">
       <StatusBadge status="success">Account active</StatusBadge>
       <p className="eyebrow">Current account</p>
       <h1 id="account-title">Your Taskfella account</h1>
+      {statusMessage && (
+        <p className={`auth-feedback ${statusTone}`} role="status" aria-live="polite">
+          {statusMessage}
+        </p>
+      )}
       <dl className="account-details">
         <div>
           <dt>Email address</dt>
@@ -207,6 +292,32 @@ export function AccountState() {
           </dd>
         </div>
       </dl>
+      <div className="account-identity" aria-labelledby="identity-title">
+        <h2 id="identity-title">Sign-in methods</h2>
+        {googleIdentity ? (
+          <p className="identity-state">Google is linked to this account.</p>
+        ) : (
+          <>
+            <p className="identity-state">
+              Google is not linked. Start from here to authenticate with Google and explicitly add
+              it to this account.
+            </p>
+            <button
+              className="secondary-action button-action"
+              type="button"
+              onClick={() => void linkGoogle()}
+              disabled={linkPending}
+            >
+              {linkPending ? "Starting Google linking…" : "Link Google account"}
+            </button>
+            {linkError && (
+              <p className="auth-feedback feedback-error" role="alert">
+                {linkError}
+              </p>
+            )}
+          </>
+        )}
+      </div>
       <LogoutControl />
     </section>
   );

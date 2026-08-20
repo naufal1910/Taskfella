@@ -1,7 +1,11 @@
-import { eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { eq, sql } from "drizzle-orm";
 import { type Database } from "@/server/db/client";
 import { accounts, passwordCredentials, type Account } from "@/server/db/schema";
 import { hashPassword, verifyPasswordWithFallback } from "./password";
+
+type AccountTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type AccountDatabase = Database | AccountTransaction;
 
 const MAX_EMAIL_LENGTH = 320;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/;
@@ -26,27 +30,43 @@ export function validateEmail(email: string): string {
   return normalized;
 }
 
+export async function lockEmailOwnership(
+  db: AccountDatabase,
+  normalizedEmail: string,
+): Promise<void> {
+  const digest = createHash("sha256")
+    .update(`taskfella-account-email:${normalizedEmail}`, "utf8")
+    .digest();
+  await db.execute(
+    sql`select pg_advisory_xact_lock(${digest.readInt32BE(0)}, ${digest.readInt32BE(4)})`,
+  );
+}
+
 export async function createAccount(
   db: Database,
   input: { email: string; now?: Date },
 ): Promise<Account> {
   const normalizedEmail = validateEmail(input.email);
   const now = input.now ?? new Date();
-  const [account] = await db
-    .insert(accounts)
-    .values({
-      email: input.email.trim(),
-      normalizedEmail,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning();
 
-  if (!account) {
-    throw new Error("Account could not be created.");
-  }
+  return db.transaction(async (tx) => {
+    await lockEmailOwnership(tx, normalizedEmail);
+    const [account] = await tx
+      .insert(accounts)
+      .values({
+        email: input.email.trim(),
+        normalizedEmail,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
 
-  return account;
+    if (!account) {
+      throw new Error("Account could not be created.");
+    }
+
+    return account;
+  });
 }
 
 export async function getAccountById(db: Database, accountId: string): Promise<Account | null> {

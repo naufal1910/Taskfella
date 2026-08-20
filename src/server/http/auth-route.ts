@@ -122,9 +122,10 @@ export async function enforceAuthRateLimits(
   db: Database,
   operation: keyof typeof AUTH_RATE_LIMITS,
   identity?: string,
+  options: { environment?: AppEnv } = {},
 ): Promise<void> {
   const policy = AUTH_RATE_LIMITS[operation];
-  const environment = getEnvironment();
+  const environment = options.environment ?? getEnvironment();
   const client = await consumeRateLimit(
     db,
     { operation: `auth:${operation}:client`, subject: clientSubject(request, environment) },
