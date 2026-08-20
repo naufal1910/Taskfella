@@ -12,6 +12,7 @@ import {
   AuthForm,
   AuthFeedback,
   authErrorMessage,
+  classifyAuthErrorCode,
   CompletionState,
   TokenState,
 } from "@/components/auth/auth-form";
@@ -80,6 +81,16 @@ describe("authentication lifecycle UI", () => {
     expect(authErrorMessage("TOKEN_EXPIRED")).toContain("expired");
     expect(authErrorMessage("TOKEN_ALREADY_USED")).toContain("already been used");
     expect(authErrorMessage("INTERNAL_ERROR")).toContain("safely");
+  });
+
+  it("classifies malformed token requests without hiding reset field errors", () => {
+    expect(classifyAuthErrorCode("verify", "INVALID_REQUEST", {})).toBe("TOKEN_INVALID");
+    expect(classifyAuthErrorCode("reset", "INVALID_REQUEST", {})).toBe("TOKEN_INVALID");
+    expect(
+      classifyAuthErrorCode("reset", "INVALID_REQUEST", {
+        password: "Use at least 12 characters.",
+      }),
+    ).toBe("INVALID_REQUEST");
   });
 
   it("renders distinct expired, already-used, and successful one-time-link states", () => {

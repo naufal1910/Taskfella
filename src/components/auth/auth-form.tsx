@@ -114,6 +114,22 @@ export function authErrorMessage(
   }
 }
 
+export function classifyAuthErrorCode(
+  mode: AuthFormMode,
+  code: string | undefined,
+  fieldErrors: AuthFieldErrors,
+): string | undefined {
+  if (
+    code === "INVALID_REQUEST" &&
+    (mode === "verify" || mode === "reset") &&
+    Object.keys(fieldErrors).length === 0
+  ) {
+    return "TOKEN_INVALID";
+  }
+
+  return code;
+}
+
 export function AuthFeedback({
   pending,
   accepted,
@@ -387,16 +403,21 @@ export function AuthForm({ mode, token }: AuthFormProps) {
             payload.error?.code === "INVALID_REQUEST"
               ? validateAuthFields(mode, { email, password, confirmation })
               : {};
+          const responseErrorCode = classifyAuthErrorCode(
+            mode,
+            payload.error?.code,
+            apiFieldErrors,
+          );
           setFieldErrors(apiFieldErrors);
           setErrorCode(
             Object.keys(apiFieldErrors).length > 0
               ? undefined
-              : (payload.error?.code ?? "UNKNOWN_ERROR"),
+              : (responseErrorCode ?? "UNKNOWN_ERROR"),
           );
           setError(
             Object.keys(apiFieldErrors).length > 0
               ? undefined
-              : authErrorMessage(payload.error?.code),
+              : authErrorMessage(responseErrorCode),
           );
           return;
         }
