@@ -6,13 +6,14 @@ import { logger } from "@/server/observability/logger";
 import { getSessionToken } from "@/server/modules/auth/cookies";
 import { validateCsrfRequest } from "@/server/modules/auth/csrf";
 import { lookupSession, type AuthenticatedSession } from "@/server/modules/auth/sessions";
-import { getAccountById } from "@/server/modules/auth/accounts";
+import { getAccountById, getAccountVersion } from "@/server/modules/auth/accounts";
 import { appErrorResponse, AppError } from "./errors";
 import { applyRequestContext, getRequestContext } from "./request-id";
 
 export interface AuthenticatedAccount {
   account: Account;
   session: AuthenticatedSession;
+  accountVersion: string;
 }
 
 export interface AuthenticationDependencies {
@@ -39,7 +40,12 @@ export async function resolveAuthenticatedAccount(
     return null;
   }
 
-  return { account, session };
+  const accountVersion = await getAccountVersion(db, account.id);
+  if (!accountVersion) {
+    return null;
+  }
+
+  return { account, session, accountVersion };
 }
 
 export async function requireAuthenticatedAccount(

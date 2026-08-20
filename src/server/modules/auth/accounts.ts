@@ -85,6 +85,15 @@ export async function getAccountById(db: Database, accountId: string): Promise<A
   return account ?? null;
 }
 
+export async function getAccountVersion(db: Database, accountId: string): Promise<string | null> {
+  const [version] = await db
+    .select({ value: sql<string>`xmin::text` })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
+    .limit(1);
+  return version?.value ?? null;
+}
+
 export async function getAccountByNormalizedEmail(
   db: Database,
   normalizedEmail: string,

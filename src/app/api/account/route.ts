@@ -1,10 +1,11 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { accounts } from "@/server/db/schema";
-import { parseAccountSettingsPatch } from "@/server/modules/account/settings";
 import { getDatabase } from "@/server/db/client";
 import { noStoreResponse, parseJsonObject } from "@/server/http/auth-route";
 import { protectedRoute } from "@/server/http/authentication";
+import { AppError } from "@/server/http/errors";
+import { parseAccountSettingsPatch } from "@/server/modules/account/settings";
 import { getSessionToken, setAppearanceCookie } from "@/server/modules/auth/cookies";
 import { listAccountOAuthIdentities } from "@/server/modules/auth/identities";
 import { enqueue } from "@/shared/async";
@@ -103,7 +104,7 @@ async function update(request: Request): Promise<NextResponse> {
   const operation = () =>
     protectedRoute(
       request,
-      async ({ account }) => {
+      async ({ account, accountVersion }) => {
         const patch = parseAccountSettingsPatch(await parseJsonObject(request));
         const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
         const database = getDatabase();
@@ -116,7 +117,7 @@ async function update(request: Request): Promise<NextResponse> {
             return tx
               .update(accounts)
               .set({ ...patch, updatedAt: new Date() })
-              .where(eq(accounts.id, account.id))
+              .where(and(eq(accounts.id, account.id), sql`xmin::text = ${accountVersion}`))
               .returning();
           });
         } else {
@@ -128,6 +129,7 @@ async function update(request: Request): Promise<NextResponse> {
         }
 
         if (!updated) {
+          if (appearancePatch) throw new AppError("CONFLICT");
           throw new Error("Account settings could not be saved.");
         }
 

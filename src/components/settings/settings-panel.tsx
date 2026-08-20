@@ -229,10 +229,11 @@ export function SettingsPanel() {
     typeof window === "undefined" ? undefined : detectBrowserTimezone(),
   );
   const [pendingSections, setPendingSections] = useState<ReadonlySet<Section>>(() => new Set());
-  const appearanceMutationTrackerRef = useRef(createAppearanceMutationTracker());
+  const appearanceMutationTrackerRef = useRef(
+    createAppearanceMutationTracker<AppearancePreference>(),
+  );
   const appearanceSaveTailRef = useRef(Promise.resolve());
   const saveControllersRef = useRef(new Set<AbortController>());
-  const appliedAppearanceRef = useRef<AppearancePreference | undefined>(undefined);
   const [status, setStatus] = useState<string>();
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -245,8 +246,9 @@ export function SettingsPanel() {
     return () => {
       mutationTracker.advance();
       for (const controller of saveControllers) controller.abort();
-      if (appliedAppearanceRef.current) {
-        notifyAppearanceChange(appliedAppearanceRef.current);
+      const savedAppearance = mutationTracker.getSaved();
+      if (savedAppearance) {
+        notifyAppearanceChange(savedAppearance);
       }
     };
   }, []);
@@ -274,8 +276,9 @@ export function SettingsPanel() {
         if (!payload.account) throw new Error("account");
         setAccount(payload.account);
         setValues(valuesFromAccount(payload.account));
-        appliedAppearanceRef.current = payload.account.appearance ?? "system";
-        notifyAppearanceChange(appliedAppearanceRef.current);
+        const preference = payload.account.appearance ?? "system";
+        appearanceMutationTrackerRef.current.recordSaved(preference);
+        notifyAppearanceChange(preference);
       })
       .catch(() => {
         if (active) setError("We could not load your settings. Try again.");
@@ -339,6 +342,7 @@ export function SettingsPanel() {
           account?: AccountPayload;
           error?: ApiError;
         };
+        if (controller.signal.aborted) return;
         if (response.status === 401) {
           invalidatePendingSaves();
           setUnauthenticated(true);
@@ -364,15 +368,16 @@ export function SettingsPanel() {
           return next;
         });
         setStatus("Saved.");
-        if (
-          appearancePatch &&
-          appearanceMutationId !== undefined &&
-          appearanceMutationTrackerRef.current.isCurrent(appearanceMutationId)
-        ) {
+        if (appearancePatch) {
           const preference = payload.account.appearance ?? "system";
-          appliedAppearanceRef.current = preference;
+          appearanceMutationTrackerRef.current.recordSaved(preference);
           cacheAppearancePreference(preference);
-          notifyAppearanceChange(preference);
+          if (
+            appearanceMutationId !== undefined &&
+            appearanceMutationTrackerRef.current.isCurrent(appearanceMutationId)
+          ) {
+            notifyAppearanceChange(preference);
+          }
         }
       } catch (caught) {
         if (controller.signal.aborted) return;
