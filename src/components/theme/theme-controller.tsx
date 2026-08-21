@@ -87,10 +87,13 @@ export function ThemeController({
         ) {
           return;
         }
+        const isCurrentSharedGeneration =
+          generation !== undefined && generation === sharedGeneration;
         if (
           generation !== undefined &&
           authoritativeGeneration !== undefined &&
-          generation !== authoritativeGeneration
+          generation !== authoritativeGeneration &&
+          !(authenticated && isCurrentSharedGeneration)
         ) {
           return;
         }
