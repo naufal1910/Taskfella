@@ -3,6 +3,7 @@ export interface AppearanceMutationTracker<T> {
   current(): number;
   isCurrent(revision: number): boolean;
   recordSaved(value: T, revision?: number): void;
+  recordDurable(value: T): void;
   getSaved(): T | undefined;
   hasUnsaved(): boolean;
 }
@@ -26,6 +27,9 @@ export function createAppearanceMutationTracker<T>(): AppearanceMutationTracker<
     recordSaved(value: T, revision?: number): void {
       savedValue = value;
       if (revision === undefined || revision === currentRevision) unsaved = false;
+    },
+    recordDurable(value: T): void {
+      savedValue = value;
     },
     getSaved(): T | undefined {
       return savedValue;

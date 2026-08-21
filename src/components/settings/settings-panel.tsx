@@ -8,6 +8,7 @@ import {
   compareAppearanceRevisions,
   currentAppearanceAuthEpoch,
   detectBrowserTimezone,
+  isAppearanceSnapshotCurrent,
   isCurrentAppearanceAuthEpoch,
   notifyAppearanceChange,
   APPEARANCE_RESET_REVISION,
@@ -308,19 +309,20 @@ export function SettingsPanel() {
         const payload = (await response.json()) as { account?: AccountPayload };
         if (!payload.account) throw new Error("account");
         if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
+        const preference = payload.account.appearance ?? "system";
+        const appearanceAccepted = cacheAppearancePreference(
+          preference,
+          payload.account.appearanceRevision,
+          payload.account.id,
+          requestGeneration,
+        );
+        if (!appearanceAccepted) return;
         setAccount(payload.account);
         setValues(valuesFromAccount(payload.account));
-        const preference = payload.account.appearance ?? "system";
         savedAppearanceRevisionRef.current = payload.account.appearanceRevision;
         savedAppearanceIdentityRef.current = payload.account.id;
         savedAppearanceGenerationRef.current = requestGeneration;
         appearanceMutationTrackerRef.current.recordSaved(preference);
-        cacheAppearancePreference(
-          preference,
-          savedAppearanceRevisionRef.current,
-          payload.account.id,
-          requestGeneration,
-        );
         notifyAppearanceChange(preference, savedAppearanceRevisionRef.current, {
           authenticated: true,
           generation: requestGeneration,
@@ -416,6 +418,15 @@ export function SettingsPanel() {
           }
           throw new Error("save");
         }
+        if (
+          !isAppearanceSnapshotCurrent(
+            payload.account.appearanceRevision,
+            payload.account.id,
+            requestGeneration,
+          )
+        ) {
+          return;
+        }
         setAccount(payload.account);
         setValues((current) =>
           current
@@ -435,43 +446,45 @@ export function SettingsPanel() {
         const appearanceHasUnsavedEdit =
           appearanceMutationTrackerRef.current.hasUnsaved() &&
           !(appearancePatch && mutationIsCurrent);
-        if (appearancePatch || (mutationIsCurrent && !appearanceHasUnsavedEdit)) {
-          const preference = payload.account.appearance ?? "system";
-          const revision = payload.account.appearanceRevision;
-          const savedRevision = savedAppearanceRevisionRef.current;
-          const responseIsOlder =
-            revision !== undefined &&
-            savedRevision !== undefined &&
-            compareAppearanceRevisions(revision, savedRevision) < 0;
-          if (responseIsOlder) {
-            const savedAppearance = appearanceMutationTrackerRef.current.getSaved();
-            if (savedAppearance) {
-              cacheAppearancePreference(
-                savedAppearance,
-                savedRevision,
-                savedAppearanceIdentityRef.current,
-                requestGeneration,
-              );
-            }
+        const preference = payload.account.appearance ?? "system";
+        const revision = payload.account.appearanceRevision;
+        const savedRevision = savedAppearanceRevisionRef.current;
+        const responseIsOlder =
+          revision !== undefined &&
+          savedRevision !== undefined &&
+          compareAppearanceRevisions(revision, savedRevision) < 0;
+        if (responseIsOlder) {
+          const savedAppearance = appearanceMutationTrackerRef.current.getSaved();
+          if (savedAppearance && !appearanceHasUnsavedEdit) {
+            cacheAppearancePreference(
+              savedAppearance,
+              savedRevision,
+              savedAppearanceIdentityRef.current,
+              requestGeneration,
+            );
+          }
+        } else {
+          if (appearanceHasUnsavedEdit) {
+            appearanceMutationTrackerRef.current.recordDurable(preference);
           } else {
             appearanceMutationTrackerRef.current.recordSaved(preference, appearanceMutationId);
-            savedAppearanceRevisionRef.current = revision ?? savedRevision;
-            savedAppearanceIdentityRef.current = payload.account.id;
-            savedAppearanceGenerationRef.current = requestGeneration;
-            if (!appearanceHasUnsavedEdit) {
-              cacheAppearancePreference(
-                preference,
-                savedAppearanceRevisionRef.current,
-                payload.account.id,
-                requestGeneration,
-              );
-              if (mutationIsCurrent) {
-                notifyAppearanceChange(preference, savedAppearanceRevisionRef.current, {
-                  authenticated: true,
-                  generation: requestGeneration,
-                  identity: payload.account.id,
-                });
-              }
+          }
+          savedAppearanceRevisionRef.current = revision ?? savedRevision;
+          savedAppearanceIdentityRef.current = payload.account.id;
+          savedAppearanceGenerationRef.current = requestGeneration;
+          if (!appearanceHasUnsavedEdit) {
+            cacheAppearancePreference(
+              preference,
+              savedAppearanceRevisionRef.current,
+              payload.account.id,
+              requestGeneration,
+            );
+            if (mutationIsCurrent) {
+              notifyAppearanceChange(preference, savedAppearanceRevisionRef.current, {
+                authenticated: true,
+                generation: requestGeneration,
+                identity: payload.account.id,
+              });
             }
           }
         }

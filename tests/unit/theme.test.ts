@@ -7,6 +7,7 @@ import {
   cacheAppearancePreference,
   clearAppearancePreferenceCache,
   compareAppearanceRevisions,
+  isAppearanceSnapshotCurrent,
   notifyAppearanceChange,
   readAppearancePreferenceFromCookie,
   resolveAppearance,
@@ -151,7 +152,8 @@ describe("appearance resolution", () => {
     withCookieDocument(
       "taskfella_appearance=dark; taskfella_appearance_revision=1; taskfella_appearance_identity=account-a; taskfella_appearance_generation=9",
       () => {
-        cacheAppearancePreference("light", "0", "account-a", 8);
+        expect(isAppearanceSnapshotCurrent("0", "account-a", 8)).toBe(false);
+        expect(cacheAppearancePreference("light", "0", "account-a", 8)).toBe(false);
         expect(document.cookie).toContain("taskfella_appearance=dark");
         expect(document.cookie).toContain("taskfella_appearance_revision=1");
         expect(document.cookie).toContain("taskfella_appearance_generation=9");

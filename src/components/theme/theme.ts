@@ -121,21 +121,20 @@ export function notifyAppearanceChange(
   }
 }
 
-export function cacheAppearancePreference(
-  preference: AppearancePreference,
+export function isAppearanceSnapshotCurrent(
   revision?: string,
   identity?: string,
   generation?: number,
-): void {
-  if (typeof document === "undefined") return;
+): boolean {
+  if (typeof document === "undefined") return false;
   const sharedRevision = readAppearanceRevision();
   const sharedIdentity = readAppearanceIdentity();
   const sharedGeneration = readAppearanceGeneration();
   if (generation !== undefined && sharedGeneration !== undefined && generation < sharedGeneration) {
-    return;
+    return false;
   }
   if (identity && sharedIdentity && identity !== sharedIdentity && generation === undefined) {
-    return;
+    return false;
   }
   if (
     revision &&
@@ -143,22 +142,14 @@ export function cacheAppearancePreference(
     identity === sharedIdentity &&
     compareAppearanceRevisions(revision, sharedRevision) < 0
   ) {
-    return;
+    return false;
   }
   if (
     generation !== undefined &&
     cachedAppearanceGeneration !== undefined &&
     generation < cachedAppearanceGeneration
   ) {
-    if (cachedAppearancePreference) {
-      writeAppearanceCache(
-        cachedAppearancePreference,
-        cachedAppearanceRevision,
-        cachedAppearanceIdentity,
-        cachedAppearanceGeneration,
-      );
-    }
-    return;
+    return false;
   }
   if (
     revision &&
@@ -166,21 +157,25 @@ export function cacheAppearancePreference(
     identity === cachedAppearanceIdentity &&
     compareAppearanceRevisions(revision, cachedAppearanceRevision) < 0
   ) {
-    if (cachedAppearancePreference) {
-      writeAppearanceCache(
-        cachedAppearancePreference,
-        cachedAppearanceRevision,
-        cachedAppearanceIdentity,
-        cachedAppearanceGeneration,
-      );
-    }
-    return;
+    return false;
   }
+  return true;
+}
+
+export function cacheAppearancePreference(
+  preference: AppearancePreference,
+  revision?: string,
+  identity?: string,
+  generation?: number,
+): boolean {
+  if (typeof document === "undefined") return false;
+  if (!isAppearanceSnapshotCurrent(revision, identity, generation)) return false;
   cachedAppearancePreference = preference;
   cachedAppearanceRevision = revision;
   cachedAppearanceIdentity = identity;
   cachedAppearanceGeneration = generation ?? cachedAppearanceGeneration;
   writeAppearanceCache(preference, revision, identity, generation);
+  return true;
 }
 
 function writeAppearanceCache(

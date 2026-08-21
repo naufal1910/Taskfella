@@ -37,4 +37,15 @@ describe("appearance mutation lifecycle", () => {
     tracker.recordSaved("dark", save);
     expect(tracker.hasUnsaved()).toBe(false);
   });
+
+  it("records durable responses without clearing a newer unsaved edit", () => {
+    const tracker = createAppearanceMutationTracker<"light" | "dark">();
+    tracker.recordSaved("light");
+    tracker.advance();
+
+    tracker.recordDurable("dark");
+
+    expect(tracker.getSaved()).toBe("dark");
+    expect(tracker.hasUnsaved()).toBe(true);
+  });
 });
