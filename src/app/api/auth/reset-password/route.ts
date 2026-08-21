@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   authRoute,
@@ -8,7 +9,7 @@ import {
   requireAuthCsrf,
   tokenStateError,
 } from "@/server/http/auth-route";
-import { clearAppearanceCookie, clearSessionCookie } from "@/server/modules/auth/cookies";
+import { clearSessionCookie } from "@/server/modules/auth/cookies";
 import { parsePasswordReset } from "@/server/modules/auth/input";
 import { resetPasswordWithToken } from "@/server/modules/auth/lifecycle";
 
@@ -28,13 +29,13 @@ export async function POST(request: Request): Promise<NextResponse> {
         {
           ok: true,
           status: "success",
+          appearanceEpoch: randomUUID(),
           message: "Your password was reset. Sign in with the new password.",
         },
         200,
         context,
       );
       clearSessionCookie(response, context.environment);
-      clearAppearanceCookie(response, context.environment);
       return response;
     }
 

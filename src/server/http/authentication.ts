@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { type AppEnv, getEnvironment } from "@/server/config/env";
 import { getDatabase, type Database } from "@/server/db/client";
@@ -14,6 +15,7 @@ export interface AuthenticatedAccount {
   account: Account;
   session: AuthenticatedSession;
   accountVersion: string;
+  appearanceEpoch: string;
 }
 
 export interface AuthenticationDependencies {
@@ -44,6 +46,7 @@ export async function resolveAuthenticatedAccount(
     account: accountWithVersion.account,
     session,
     accountVersion: accountWithVersion.version,
+    appearanceEpoch: session.id,
   };
 }
 
@@ -100,6 +103,9 @@ export async function protectedRoute(
     });
 
     const response = appErrorResponse(appError, context.requestId);
+    if (appError.code === "UNAUTHORIZED") {
+      response.headers.set("x-taskfella-appearance-epoch", randomUUID());
+    }
     applyRequestContext(response.headers, context);
     return response;
   }

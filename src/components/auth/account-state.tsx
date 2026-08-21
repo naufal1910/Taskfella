@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
   APPEARANCE_RESET_REVISION,
-  beginAppearanceAuthEpoch,
   cacheAppearancePreference,
   clearAppearancePreferenceCache,
   currentAppearanceAuthEpoch,
+  isAppearanceSnapshotCurrent,
   isCurrentAppearanceAuthEpoch,
   notifyAppearanceChange,
+  setAppearanceAuthEpoch,
   type AppearancePreference,
 } from "@/components/theme/theme";
 import { PendingFeedback } from "./pending-feedback";
@@ -30,6 +31,7 @@ interface AccountPayload {
   identities: AccountIdentity[];
   appearance?: AppearancePreference;
   appearanceRevision?: string;
+  appearanceEpoch?: string;
 }
 
 function csrfCookie(): string | undefined {
@@ -70,10 +72,14 @@ function LogoutControl() {
         cache: "no-store",
         headers: { "x-csrf-token": token },
       });
+      const payload = (await response.json().catch(() => ({}))) as {
+        appearanceEpoch?: string;
+      };
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
       clearAppearancePreferenceCache();
-      const generation = beginAppearanceAuthEpoch();
+      const generation = payload.appearanceEpoch;
+      if (generation) setAppearanceAuthEpoch(generation, true);
       notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
         generation,
         reset: true,
@@ -198,7 +204,8 @@ export function AccountState() {
         if (response.status === 401) {
           if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
           clearAppearancePreferenceCache();
-          const generation = beginAppearanceAuthEpoch();
+          const generation = response.headers.get("x-taskfella-appearance-epoch") ?? undefined;
+          if (generation) setAppearanceAuthEpoch(generation, true);
           notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
             generation,
             reset: true,
@@ -210,17 +217,33 @@ export function AccountState() {
         const payload = (await response.json()) as { account?: AccountPayload };
         if (!payload.account) throw new Error("account");
         if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
+        const responseEpoch = payload.account.appearanceEpoch ?? requestGeneration;
+        if (
+          !isAppearanceSnapshotCurrent(
+            payload.account.appearanceRevision,
+            payload.account.id,
+            responseEpoch,
+            requestGeneration,
+          )
+        ) {
+          return;
+        }
         setAccount(payload.account);
         cacheAppearancePreference(
           payload.account.appearance ?? "system",
           payload.account.appearanceRevision,
           payload.account.id,
+          responseEpoch,
           requestGeneration,
         );
         notifyAppearanceChange(
           payload.account.appearance ?? "system",
           payload.account.appearanceRevision,
-          { authenticated: true, generation: requestGeneration, identity: payload.account.id },
+          {
+            authenticated: true,
+            generation: responseEpoch,
+            identity: payload.account.id,
+          },
         );
       })
       .catch(() => {

@@ -6,9 +6,6 @@ import { APPEARANCE_VALUES, type Appearance } from "@/server/modules/account/set
 export const SESSION_COOKIE_NAME = "taskfella_session";
 export const CSRF_COOKIE_NAME = "taskfella_csrf";
 export const APPEARANCE_COOKIE_NAME = "taskfella_appearance";
-export const APPEARANCE_REVISION_COOKIE_NAME = "taskfella_appearance_revision";
-export const APPEARANCE_IDENTITY_COOKIE_NAME = "taskfella_appearance_identity";
-export const APPEARANCE_GENERATION_COOKIE_NAME = "taskfella_appearance_generation";
 export const CSRF_HEADER_NAME = "x-csrf-token";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 export const CSRF_COOKIE_MAX_AGE_SECONDS = 24 * 60 * 60;
@@ -55,14 +52,56 @@ export function getCsrfCookie(request: Request): string | undefined {
 }
 
 export function getAppearanceCookie(request: Request): Appearance | undefined {
-  const value = readCookie(request, APPEARANCE_COOKIE_NAME);
+  const value = readAppearanceMetadataCookie(request)?.preference;
   return value && APPEARANCE_VALUES.includes(value as Appearance)
     ? (value as Appearance)
     : undefined;
 }
 
 export function getAppearanceRevisionCookie(request: Request): string | undefined {
-  return readCookie(request, APPEARANCE_REVISION_COOKIE_NAME);
+  return readAppearanceMetadataCookie(request)?.revision;
+}
+
+function readAppearanceMetadataCookie(request: Request):
+  | {
+      preference?: string;
+      revision?: string;
+      identity?: string;
+      epoch?: string;
+    }
+  | undefined {
+  const value = readCookie(request, APPEARANCE_COOKIE_NAME);
+  if (!value) return undefined;
+  try {
+    const metadata = JSON.parse(value) as {
+      preference?: unknown;
+      revision?: unknown;
+      identity?: unknown;
+      epoch?: unknown;
+    };
+    if (
+      typeof metadata.preference !== "string" ||
+      !APPEARANCE_VALUES.includes(metadata.preference as Appearance) ||
+      (metadata.revision !== undefined &&
+        (typeof metadata.revision !== "string" ||
+          (metadata.revision !== "reset" && !/^\d+$/.test(metadata.revision)))) ||
+      (metadata.identity !== undefined &&
+        (typeof metadata.identity !== "string" ||
+          !/^[A-Za-z0-9._:-]{1,128}$/.test(metadata.identity))) ||
+      (metadata.epoch !== undefined &&
+        (typeof metadata.epoch !== "string" || !/^[A-Za-z0-9._:-]{1,128}$/.test(metadata.epoch)))
+    ) {
+      return undefined;
+    }
+    return metadata as {
+      preference: string;
+      revision?: string;
+      identity?: string;
+      epoch?: string;
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export function getOAuthStateCookie(request: Request): string | undefined {
@@ -142,40 +181,23 @@ export function setAppearanceCookie(
   environment?: AppEnv,
   revision?: string,
   identity?: string,
+  epoch?: string,
 ): void {
-  setCookie(response, APPEARANCE_COOKIE_NAME, appearance, {
+  const metadata = JSON.stringify({
+    preference: appearance,
+    ...(revision ? { revision } : {}),
+    ...(identity ? { identity } : {}),
+    ...(epoch ? { epoch } : {}),
+  });
+  setCookie(response, APPEARANCE_COOKIE_NAME, encodeURIComponent(metadata), {
     maxAge: APPEARANCE_COOKIE_MAX_AGE_SECONDS,
     httpOnly: false,
     secure: appearanceCookieIsSecure(environment),
   });
-  if (revision) {
-    setCookie(response, APPEARANCE_REVISION_COOKIE_NAME, revision, {
-      maxAge: APPEARANCE_COOKIE_MAX_AGE_SECONDS,
-      httpOnly: false,
-      secure: appearanceCookieIsSecure(environment),
-    });
-  }
-  if (identity) {
-    setCookie(response, APPEARANCE_IDENTITY_COOKIE_NAME, identity, {
-      maxAge: APPEARANCE_COOKIE_MAX_AGE_SECONDS,
-      httpOnly: false,
-      secure: appearanceCookieIsSecure(environment),
-    });
-  }
 }
 
 export function clearAppearanceCookie(response: NextResponse, environment?: AppEnv): void {
   setCookie(response, APPEARANCE_COOKIE_NAME, "", {
-    maxAge: 0,
-    httpOnly: false,
-    secure: appearanceCookieIsSecure(environment),
-  });
-  setCookie(response, APPEARANCE_REVISION_COOKIE_NAME, "", {
-    maxAge: 0,
-    httpOnly: false,
-    secure: appearanceCookieIsSecure(environment),
-  });
-  setCookie(response, APPEARANCE_IDENTITY_COOKIE_NAME, "", {
     maxAge: 0,
     httpOnly: false,
     secure: appearanceCookieIsSecure(environment),

@@ -18,6 +18,7 @@ interface ThemeControllerProps {
   serverOwnsPreference: boolean;
   initialRevision?: string;
   initialIdentity?: string;
+  initialGeneration?: string;
 }
 
 export function ThemeController({
@@ -25,13 +26,16 @@ export function ThemeController({
   serverOwnsPreference,
   initialRevision,
   initialIdentity,
+  initialGeneration,
 }: ThemeControllerProps) {
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     let authoritativePreference = serverOwnsPreference ? initialPreference : undefined;
     let authoritativeRevision = serverOwnsPreference ? initialRevision : readAppearanceRevision();
     let authoritativeIdentity = serverOwnsPreference ? initialIdentity : readAppearanceIdentity();
-    let authoritativeGeneration = readAppearanceGeneration();
+    let authoritativeGeneration = serverOwnsPreference
+      ? initialGeneration
+      : readAppearanceGeneration();
     let authenticationReset = serverOwnsPreference && !initialIdentity;
     const applyCurrent = () => {
       const preference = authoritativePreference ?? readAppearanceCookie();
@@ -51,7 +55,7 @@ export function ThemeController({
           : undefined;
       if (detail && isAppearancePreference(detail.preference)) {
         const revision = typeof detail.revision === "string" ? detail.revision : undefined;
-        const generation = typeof detail.generation === "number" ? detail.generation : undefined;
+        const generation = typeof detail.generation === "string" ? detail.generation : undefined;
         const identity = typeof detail.identity === "string" ? detail.identity : undefined;
         const reset = detail.reset === true;
         const authenticated = detail.authenticated === true;
@@ -61,7 +65,7 @@ export function ThemeController({
         if (
           generation !== undefined &&
           sharedGeneration !== undefined &&
-          generation < sharedGeneration
+          generation !== sharedGeneration
         ) {
           return;
         }
@@ -77,7 +81,7 @@ export function ThemeController({
         if (
           generation !== undefined &&
           authoritativeGeneration !== undefined &&
-          generation < authoritativeGeneration
+          generation !== authoritativeGeneration
         ) {
           return;
         }
@@ -93,7 +97,7 @@ export function ThemeController({
           authenticationReset &&
           authoritativeGeneration !== undefined &&
           generation !== undefined &&
-          generation <= authoritativeGeneration
+          generation === authoritativeGeneration
         ) {
           return;
         }
@@ -104,7 +108,7 @@ export function ThemeController({
           identity !== authoritativeIdentity &&
           (generation === undefined ||
             authoritativeGeneration === undefined ||
-            generation <= authoritativeGeneration)
+            generation === authoritativeGeneration)
         ) {
           return;
         }
@@ -142,7 +146,13 @@ export function ThemeController({
       media.removeEventListener("change", applyCurrent);
       window.removeEventListener(APPEARANCE_CHANGE_EVENT, updateFromAppearanceEvent);
     };
-  }, [initialIdentity, initialPreference, initialRevision, serverOwnsPreference]);
+  }, [
+    initialGeneration,
+    initialIdentity,
+    initialPreference,
+    initialRevision,
+    serverOwnsPreference,
+  ]);
 
   return null;
 }

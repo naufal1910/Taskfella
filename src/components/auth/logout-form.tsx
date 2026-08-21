@@ -5,9 +5,9 @@ import { useState } from "react";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
   APPEARANCE_RESET_REVISION,
-  beginAppearanceAuthEpoch,
   clearAppearancePreferenceCache,
   notifyAppearanceChange,
+  setAppearanceAuthEpoch,
 } from "@/components/theme/theme";
 import { PendingFeedback } from "./pending-feedback";
 
@@ -38,10 +38,14 @@ export function LogoutForm() {
         cache: "no-store",
         headers: { "x-csrf-token": token },
       });
+      const payload = (await response.json().catch(() => ({}))) as {
+        appearanceEpoch?: string;
+      };
       if (!response.ok) throw new Error("logout");
       setMessageTone("success");
       clearAppearancePreferenceCache();
-      const generation = beginAppearanceAuthEpoch();
+      const generation = payload.appearanceEpoch;
+      if (generation) setAppearanceAuthEpoch(generation, true);
       notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
         generation,
         reset: true,

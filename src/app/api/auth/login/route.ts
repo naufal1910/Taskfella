@@ -50,6 +50,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           emailVerifiedAt: result.account.emailVerifiedAt,
           appearance: appearanceAccount.appearance,
           appearanceRevision,
+          appearanceEpoch: result.sessionId,
         },
       },
       200,

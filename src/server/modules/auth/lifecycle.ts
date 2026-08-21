@@ -35,7 +35,13 @@ export interface SignupResult {
 export type LoginResult =
   | { state: "invalid-credentials" }
   | { state: "unverified"; account: Account }
-  | { state: "authenticated"; account: Account; token: string; expiresAt: Date };
+  | {
+      state: "authenticated";
+      account: Account;
+      token: string;
+      expiresAt: Date;
+      sessionId: string;
+    };
 
 function expiryFrom(now: Date, ttlMs: number): Date {
   if (!Number.isFinite(now.getTime()) || !Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -219,7 +225,7 @@ export async function authenticateAndIssueSession(
     }
 
     const presentedHash = input.presentedToken ? hashTokenOrNull(input.presentedToken) : null;
-    let issued: { token: string; expiresAt: Date } | undefined;
+    let issued: { token: string; expiresAt: Date; sessionId: string } | undefined;
 
     if (presentedHash) {
       const [existing] = await tx
@@ -262,7 +268,11 @@ export async function authenticateAndIssueSession(
           .update(sessions)
           .set({ replacedBySessionId: replacement.id })
           .where(eq(sessions.id, existing.id));
-        issued = { token: replacementToken, expiresAt: replacement.expiresAt };
+        issued = {
+          token: replacementToken,
+          expiresAt: replacement.expiresAt,
+          sessionId: replacement.id,
+        };
       } else if (existing) {
         await tx
           .update(sessions)
@@ -283,11 +293,11 @@ export async function authenticateAndIssueSession(
           createdAt: now,
           lastAccessedAt: now,
         })
-        .returning({ expiresAt: sessions.expiresAt });
+        .returning({ id: sessions.id, expiresAt: sessions.expiresAt });
       if (!session) {
         throw new Error("Session could not be created.");
       }
-      issued = { token, expiresAt: session.expiresAt };
+      issued = { token, expiresAt: session.expiresAt, sessionId: session.id };
     }
 
     return { state: "authenticated", account, ...issued };

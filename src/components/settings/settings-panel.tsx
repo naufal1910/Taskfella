@@ -13,9 +13,10 @@ import {
   notifyAppearanceChange,
   readAppearanceCookie,
   readAppearanceIdentity,
+  readAppearanceGeneration,
   readAppearanceRevision,
   APPEARANCE_RESET_REVISION,
-  beginAppearanceAuthEpoch,
+  setAppearanceAuthEpoch,
   type AppearancePreference,
 } from "@/components/theme/theme";
 import { createAppearanceMutationTracker } from "@/shared/appearance-mutation";
@@ -40,6 +41,7 @@ interface AccountPayload {
   timezone?: string;
   appearance?: AppearancePreference;
   appearanceRevision?: string;
+  appearanceEpoch?: string;
   notificationsEnabled?: boolean;
   soundEnabled?: boolean;
   focusDurationMinutes?: number;
@@ -247,7 +249,7 @@ export function SettingsPanel() {
   const saveControllersRef = useRef(new Set<AbortController>());
   const savedAppearanceRevisionRef = useRef<string | undefined>(undefined);
   const savedAppearanceIdentityRef = useRef<string | undefined>(undefined);
-  const savedAppearanceGenerationRef = useRef<number | undefined>(undefined);
+  const savedAppearanceGenerationRef = useRef<string | undefined>(undefined);
   const [status, setStatus] = useState<string>();
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -299,7 +301,8 @@ export function SettingsPanel() {
           appearanceMutationTrackerRef.current.recordSaved("system");
           savedAppearanceRevisionRef.current = APPEARANCE_RESET_REVISION;
           savedAppearanceIdentityRef.current = undefined;
-          const generation = beginAppearanceAuthEpoch();
+          const generation = response.headers.get("x-taskfella-appearance-epoch") ?? undefined;
+          if (generation) setAppearanceAuthEpoch(generation, true);
           savedAppearanceGenerationRef.current = generation;
           notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
             generation,
@@ -314,16 +317,19 @@ export function SettingsPanel() {
         if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
         const account = payload.account;
         const preference = account.appearance ?? "system";
+        const responseEpoch = account.appearanceEpoch ?? requestGeneration;
         const appearanceAccepted = cacheAppearancePreference(
           preference,
           account.appearanceRevision,
           account.id,
+          responseEpoch,
           requestGeneration,
         );
         if (!appearanceAccepted) {
           const fallbackPreference = readAppearanceCookie();
           const fallbackRevision = readAppearanceRevision();
           const fallbackIdentity = readAppearanceIdentity();
+          const fallbackEpoch = readAppearanceGeneration() ?? requestGeneration;
           const acceptedRevision = fallbackIdentity === account.id ? fallbackRevision : undefined;
           setAccount(
             (current) =>
@@ -339,11 +345,11 @@ export function SettingsPanel() {
           });
           savedAppearanceRevisionRef.current = acceptedRevision;
           savedAppearanceIdentityRef.current = account.id;
-          savedAppearanceGenerationRef.current = requestGeneration;
+          savedAppearanceGenerationRef.current = fallbackEpoch;
           appearanceMutationTrackerRef.current.recordSaved(fallbackPreference);
           notifyAppearanceChange(fallbackPreference, acceptedRevision, {
             authenticated: true,
-            generation: requestGeneration,
+            generation: fallbackEpoch,
             identity: account.id,
           });
           return;
@@ -352,11 +358,11 @@ export function SettingsPanel() {
         setValues(valuesFromAccount(account));
         savedAppearanceRevisionRef.current = account.appearanceRevision;
         savedAppearanceIdentityRef.current = account.id;
-        savedAppearanceGenerationRef.current = requestGeneration;
+        savedAppearanceGenerationRef.current = responseEpoch;
         appearanceMutationTrackerRef.current.recordSaved(preference);
         notifyAppearanceChange(preference, savedAppearanceRevisionRef.current, {
           authenticated: true,
-          generation: requestGeneration,
+          generation: responseEpoch,
           identity: account.id,
         });
       })
@@ -455,7 +461,8 @@ export function SettingsPanel() {
           appearanceMutationTrackerRef.current.recordSaved("system");
           savedAppearanceRevisionRef.current = APPEARANCE_RESET_REVISION;
           savedAppearanceIdentityRef.current = undefined;
-          const generation = beginAppearanceAuthEpoch();
+          const generation = response.headers.get("x-taskfella-appearance-epoch") ?? undefined;
+          if (generation) setAppearanceAuthEpoch(generation, true);
           savedAppearanceGenerationRef.current = generation;
           notifyAppearanceChange("system", APPEARANCE_RESET_REVISION, {
             generation,
@@ -470,9 +477,11 @@ export function SettingsPanel() {
           }
           throw new Error("save");
         }
+        const responseEpoch = payload.account.appearanceEpoch ?? requestGeneration;
         const appearanceAccepted = isAppearanceSnapshotCurrent(
           payload.account.appearanceRevision,
           payload.account.id,
+          responseEpoch,
           requestGeneration,
         );
         const statePatch = appearanceAccepted
@@ -522,6 +531,7 @@ export function SettingsPanel() {
               savedAppearance,
               savedRevision,
               savedAppearanceIdentityRef.current,
+              responseEpoch,
               requestGeneration,
             );
           }
@@ -533,18 +543,19 @@ export function SettingsPanel() {
           }
           savedAppearanceRevisionRef.current = revision ?? savedRevision;
           savedAppearanceIdentityRef.current = payload.account.id;
-          savedAppearanceGenerationRef.current = requestGeneration;
+          savedAppearanceGenerationRef.current = responseEpoch;
           if (!appearanceHasUnsavedEdit) {
             cacheAppearancePreference(
               preference,
               savedAppearanceRevisionRef.current,
               payload.account.id,
+              responseEpoch,
               requestGeneration,
             );
             if (mutationIsCurrent) {
               notifyAppearanceChange(preference, savedAppearanceRevisionRef.current, {
                 authenticated: true,
-                generation: requestGeneration,
+                generation: responseEpoch,
                 identity: payload.account.id,
               });
             }

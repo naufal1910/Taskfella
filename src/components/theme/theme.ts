@@ -1,7 +1,4 @@
 export const APPEARANCE_COOKIE = "taskfella_appearance";
-export const APPEARANCE_REVISION_COOKIE = "taskfella_appearance_revision";
-export const APPEARANCE_IDENTITY_COOKIE = "taskfella_appearance_identity";
-export const APPEARANCE_GENERATION_COOKIE = "taskfella_appearance_generation";
 export const APPEARANCE_RESET_REVISION = "reset";
 const APPEARANCE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 export const APPEARANCE_CHANGE_EVENT = "taskfella:appearance-change";
@@ -13,35 +10,81 @@ export { detectBrowserTimezone } from "@/shared/timezone";
 let cachedAppearancePreference: AppearancePreference | undefined;
 let cachedAppearanceRevision: string | undefined;
 let cachedAppearanceIdentity: string | undefined;
-let cachedAppearanceGeneration: number | undefined;
-let appearanceAuthEpoch = 0;
+let cachedAppearanceEpoch: string | undefined;
 
-export function beginAppearanceAuthEpoch(): number {
-  const sharedGeneration = readAppearanceGeneration();
-  const random = new Uint32Array(1);
-  const randomValue =
-    typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function"
-      ? crypto.getRandomValues(random)[0] % 1000
-      : Math.floor(Math.random() * 1000);
-  const clockEpoch = Date.now() * 1000 + randomValue;
-  appearanceAuthEpoch = Math.max(
-    appearanceAuthEpoch + 1,
-    sharedGeneration === undefined ? 0 : sharedGeneration + 1,
-    clockEpoch,
-  );
-  writeAppearanceGeneration(appearanceAuthEpoch);
-  return appearanceAuthEpoch;
+interface AppearanceMetadata {
+  preference: AppearancePreference;
+  revision?: string;
+  identity?: string;
+  epoch?: string;
 }
 
-export function currentAppearanceAuthEpoch(): number {
-  const sharedGeneration = readAppearanceGeneration();
-  if (sharedGeneration !== undefined) {
-    appearanceAuthEpoch = Math.max(appearanceAuthEpoch, sharedGeneration);
+function isAppearanceRevision(value: string): boolean {
+  return value === APPEARANCE_RESET_REVISION || /^\d+$/.test(value);
+}
+
+function isOpaqueIdentifier(value: string): boolean {
+  return /^[A-Za-z0-9._:-]{1,128}$/.test(value);
+}
+
+function readAppearanceMetadata(): AppearanceMetadata | undefined {
+  if (typeof document === "undefined") return undefined;
+  const prefix = `${APPEARANCE_COOKIE}=`;
+  const part = document.cookie
+    .split(";")
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(prefix));
+  if (!part) return undefined;
+  try {
+    const parsed = JSON.parse(decodeURIComponent(part.slice(prefix.length))) as Record<
+      string,
+      unknown
+    >;
+    if (!isAppearancePreference(parsed.preference)) return undefined;
+    if (
+      (parsed.revision !== undefined &&
+        (typeof parsed.revision !== "string" || !isAppearanceRevision(parsed.revision))) ||
+      (parsed.identity !== undefined &&
+        (typeof parsed.identity !== "string" || !isOpaqueIdentifier(parsed.identity))) ||
+      (parsed.epoch !== undefined &&
+        (typeof parsed.epoch !== "string" || !isOpaqueIdentifier(parsed.epoch)))
+    ) {
+      return undefined;
+    }
+    return {
+      preference: parsed.preference,
+      revision: parsed.revision as string | undefined,
+      identity: parsed.identity as string | undefined,
+      epoch: parsed.epoch as string | undefined,
+    };
+  } catch {
+    return undefined;
   }
-  return appearanceAuthEpoch;
 }
 
-export function isCurrentAppearanceAuthEpoch(epoch: number): boolean {
+export function setAppearanceAuthEpoch(epoch: string, reset = false): void {
+  if (!isOpaqueIdentifier(epoch)) return;
+  cachedAppearanceEpoch = epoch;
+  if (reset) {
+    cachedAppearancePreference = "system";
+    cachedAppearanceRevision = APPEARANCE_RESET_REVISION;
+    cachedAppearanceIdentity = undefined;
+  }
+  writeAppearanceCache(
+    cachedAppearancePreference ?? "system",
+    cachedAppearanceRevision,
+    cachedAppearanceIdentity,
+    epoch,
+  );
+}
+
+export function currentAppearanceAuthEpoch(): string | undefined {
+  const epoch = readAppearanceMetadata()?.epoch;
+  cachedAppearanceEpoch = epoch;
+  return epoch;
+}
+
+export function isCurrentAppearanceAuthEpoch(epoch: string | undefined): boolean {
   return currentAppearanceAuthEpoch() === epoch;
 }
 
@@ -50,19 +93,21 @@ export function notifyAppearanceChange(
   revision?: string,
   options: {
     authenticated?: boolean;
-    generation?: number;
+    generation?: string;
     identity?: string;
     reset?: boolean;
   } = {},
 ): void {
   if (typeof document !== "undefined") {
-    const sharedRevision = readAppearanceRevision();
-    const sharedIdentity = readAppearanceIdentity();
-    const sharedGeneration = readAppearanceGeneration();
+    const shared = readAppearanceMetadata();
+    const sharedRevision = shared?.revision;
+    const sharedIdentity = shared?.identity;
+    const sharedGeneration = shared?.epoch;
+    if (revision && !isAppearanceRevision(revision)) return;
     if (
       options.generation !== undefined &&
       sharedGeneration !== undefined &&
-      options.generation < sharedGeneration
+      options.generation !== sharedGeneration
     ) {
       return;
     }
@@ -85,8 +130,8 @@ export function notifyAppearanceChange(
   }
   if (
     options.generation !== undefined &&
-    cachedAppearanceGeneration !== undefined &&
-    options.generation < cachedAppearanceGeneration
+    cachedAppearanceEpoch !== undefined &&
+    options.generation !== cachedAppearanceEpoch
   ) {
     return;
   }
@@ -94,8 +139,7 @@ export function notifyAppearanceChange(
     revision &&
     (revision === APPEARANCE_RESET_REVISION ||
       (options.generation !== undefined &&
-        (cachedAppearanceGeneration === undefined ||
-          options.generation >= cachedAppearanceGeneration)) ||
+        (cachedAppearanceEpoch === undefined || options.generation === cachedAppearanceEpoch)) ||
       options.identity !== cachedAppearanceIdentity ||
       !cachedAppearanceRevision ||
       compareAppearanceRevisions(revision, cachedAppearanceRevision) >= 0)
@@ -103,7 +147,7 @@ export function notifyAppearanceChange(
     cachedAppearancePreference = preference;
     cachedAppearanceRevision = revision;
     cachedAppearanceIdentity = options.identity;
-    cachedAppearanceGeneration = options.generation ?? cachedAppearanceGeneration;
+    cachedAppearanceEpoch = options.generation ?? cachedAppearanceEpoch;
   }
   if (typeof window !== "undefined") {
     window.dispatchEvent(
@@ -124,13 +168,21 @@ export function notifyAppearanceChange(
 export function isAppearanceSnapshotCurrent(
   revision?: string,
   identity?: string,
-  generation?: number,
+  generation?: string,
+  requestGeneration?: string,
 ): boolean {
   if (typeof document === "undefined") return false;
-  const sharedRevision = readAppearanceRevision();
-  const sharedIdentity = readAppearanceIdentity();
-  const sharedGeneration = readAppearanceGeneration();
-  if (generation !== undefined && sharedGeneration !== undefined && generation < sharedGeneration) {
+  if (revision && !isAppearanceRevision(revision)) return false;
+  const shared = readAppearanceMetadata();
+  const sharedRevision = shared?.revision;
+  const sharedIdentity = shared?.identity;
+  const sharedGeneration = shared?.epoch;
+  if (
+    generation !== undefined &&
+    sharedGeneration !== undefined &&
+    generation !== sharedGeneration &&
+    requestGeneration !== sharedGeneration
+  ) {
     return false;
   }
   if (identity && sharedIdentity && identity !== sharedIdentity && generation === undefined) {
@@ -146,8 +198,9 @@ export function isAppearanceSnapshotCurrent(
   }
   if (
     generation !== undefined &&
-    cachedAppearanceGeneration !== undefined &&
-    generation < cachedAppearanceGeneration
+    cachedAppearanceEpoch !== undefined &&
+    generation !== cachedAppearanceEpoch &&
+    requestGeneration !== cachedAppearanceEpoch
   ) {
     return false;
   }
@@ -166,25 +219,32 @@ export function cacheAppearancePreference(
   preference: AppearancePreference,
   revision?: string,
   identity?: string,
-  generation?: number,
+  generation?: string,
+  requestGeneration?: string,
 ): boolean {
   if (typeof document === "undefined") return false;
-  if (!isAppearanceSnapshotCurrent(revision, identity, generation)) {
-    const sharedRevision = readAppearanceRevision();
-    const sharedIdentity = readAppearanceIdentity();
-    const sharedGeneration = readAppearanceGeneration();
+  if (!isAppearanceSnapshotCurrent(revision, identity, generation, requestGeneration)) {
+    const shared = readAppearanceMetadata();
+    const sharedRevision = shared?.revision;
+    const sharedIdentity = shared?.identity;
+    const sharedGeneration = shared?.epoch;
     const sharedStateIsNewer =
       (generation !== undefined &&
         sharedGeneration !== undefined &&
-        generation < sharedGeneration) ||
+        generation !== sharedGeneration &&
+        requestGeneration !== sharedGeneration) ||
       (revision !== undefined &&
         sharedRevision !== undefined &&
         identity === sharedIdentity &&
         compareAppearanceRevisions(revision, sharedRevision) < 0);
     const localStateIsNewer =
       (generation !== undefined &&
-        cachedAppearanceGeneration !== undefined &&
-        generation < cachedAppearanceGeneration) ||
+        cachedAppearanceEpoch !== undefined &&
+        generation === cachedAppearanceEpoch &&
+        requestGeneration !== cachedAppearanceEpoch &&
+        revision !== undefined &&
+        cachedAppearanceRevision !== undefined &&
+        compareAppearanceRevisions(revision, cachedAppearanceRevision) < 0) ||
       (revision !== undefined &&
         cachedAppearanceRevision !== undefined &&
         identity === cachedAppearanceIdentity &&
@@ -194,7 +254,7 @@ export function cacheAppearancePreference(
         cachedAppearancePreference,
         cachedAppearanceRevision,
         cachedAppearanceIdentity,
-        cachedAppearanceGeneration,
+        cachedAppearanceEpoch,
       );
     }
     return false;
@@ -202,7 +262,7 @@ export function cacheAppearancePreference(
   cachedAppearancePreference = preference;
   cachedAppearanceRevision = revision;
   cachedAppearanceIdentity = identity;
-  cachedAppearanceGeneration = generation ?? cachedAppearanceGeneration;
+  cachedAppearanceEpoch = generation ?? cachedAppearanceEpoch;
   writeAppearanceCache(preference, revision, identity, generation);
   return true;
 }
@@ -211,11 +271,17 @@ function writeAppearanceCache(
   preference: AppearancePreference,
   revision?: string,
   identity?: string,
-  generation?: number,
+  generation?: string,
 ): void {
   const secure = typeof window !== "undefined" && window.location.protocol === "https:";
+  const metadata: AppearanceMetadata = {
+    preference,
+    ...(revision ? { revision } : {}),
+    ...(identity ? { identity } : {}),
+    ...(generation ? { epoch: generation } : {}),
+  };
   document.cookie = [
-    `${APPEARANCE_COOKIE}=${encodeURIComponent(preference)}`,
+    `${APPEARANCE_COOKIE}=${encodeURIComponent(JSON.stringify(metadata))}`,
     "path=/",
     `max-age=${APPEARANCE_COOKIE_MAX_AGE_SECONDS}`,
     "samesite=lax",
@@ -223,39 +289,6 @@ function writeAppearanceCache(
   ]
     .filter(Boolean)
     .join("; ");
-  if (revision) {
-    document.cookie = [
-      APPEARANCE_REVISION_COOKIE + "=" + encodeURIComponent(revision),
-      "path=/",
-      "max-age=" + APPEARANCE_COOKIE_MAX_AGE_SECONDS,
-      "samesite=lax",
-      secure ? "secure" : undefined,
-    ]
-      .filter(Boolean)
-      .join("; ");
-  }
-  if (identity) {
-    document.cookie = [
-      APPEARANCE_IDENTITY_COOKIE + "=" + encodeURIComponent(identity),
-      "path=/",
-      "max-age=" + APPEARANCE_COOKIE_MAX_AGE_SECONDS,
-      "samesite=lax",
-      secure ? "secure" : undefined,
-    ]
-      .filter(Boolean)
-      .join("; ");
-  }
-  if (generation !== undefined) {
-    document.cookie = [
-      APPEARANCE_GENERATION_COOKIE + "=" + generation,
-      "path=/",
-      "max-age=" + APPEARANCE_COOKIE_MAX_AGE_SECONDS,
-      "samesite=lax",
-      secure ? "secure" : undefined,
-    ]
-      .filter(Boolean)
-      .join("; ");
-  }
 }
 
 export function clearAppearancePreferenceCache(): void {
@@ -263,9 +296,8 @@ export function clearAppearancePreferenceCache(): void {
   cachedAppearancePreference = undefined;
   cachedAppearanceRevision = undefined;
   document.cookie = APPEARANCE_COOKIE + "=; path=/; max-age=0";
-  document.cookie = APPEARANCE_REVISION_COOKIE + "=; path=/; max-age=0";
-  document.cookie = APPEARANCE_IDENTITY_COOKIE + "=; path=/; max-age=0";
   cachedAppearanceIdentity = undefined;
+  cachedAppearanceEpoch = undefined;
 }
 
 export function resolveAppearance(
@@ -283,19 +315,12 @@ export function isAppearancePreference(value: unknown): value is AppearancePrefe
 }
 
 export function compareAppearanceRevisions(left: string, right: string): number {
+  if (!isAppearanceRevision(left) || !isAppearanceRevision(right)) return 0;
   if (left === APPEARANCE_RESET_REVISION) return right === left ? 0 : -1;
   if (right === APPEARANCE_RESET_REVISION) return 1;
-  if (/^\d+$/.test(left) && /^\d+$/.test(right)) {
-    const leftValue = BigInt(left);
-    const rightValue = BigInt(right);
-    return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
-  }
-  const leftTime = Date.parse(left);
-  const rightTime = Date.parse(right);
-  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
-    return leftTime < rightTime ? -1 : leftTime > rightTime ? 1 : 0;
-  }
-  return left < right ? -1 : left > right ? 1 : 0;
+  const leftValue = BigInt(left);
+  const rightValue = BigInt(right);
+  return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
 }
 
 export function readAppearancePreferenceFromCookie(
@@ -316,59 +341,19 @@ export function applyAppearance(
 }
 
 export function readAppearanceCookie(): AppearancePreference {
-  const prefix = `${APPEARANCE_COOKIE}=`;
-  const part = document.cookie
-    .split(";")
-    .map((value) => value.trim())
-    .find((value) => value.startsWith(prefix));
-  if (!part) return "system";
-  try {
-    return readAppearancePreferenceFromCookie(decodeURIComponent(part.slice(prefix.length)));
-  } catch {
-    return "system";
-  }
-}
-
-function readCookie(name: string): string | undefined {
-  const prefix = name + "=";
-  const part = document.cookie
-    .split(";")
-    .map((value) => value.trim())
-    .find((value) => value.startsWith(prefix));
-  if (!part) return undefined;
-  try {
-    return decodeURIComponent(part.slice(prefix.length));
-  } catch {
-    return undefined;
-  }
+  return readAppearanceMetadata()?.preference ?? "system";
 }
 
 export function readAppearanceRevision(): string | undefined {
-  return readCookie(APPEARANCE_REVISION_COOKIE);
+  return readAppearanceMetadata()?.revision;
 }
 
 export function readAppearanceIdentity(): string | undefined {
-  return readCookie(APPEARANCE_IDENTITY_COOKIE);
+  return readAppearanceMetadata()?.identity;
 }
 
-export function readAppearanceGeneration(): number | undefined {
-  const value = readCookie(APPEARANCE_GENERATION_COOKIE);
-  if (!value || !/^\d+$/.test(value)) return undefined;
-  return Number(value);
-}
-
-function writeAppearanceGeneration(generation: number): void {
-  if (typeof document === "undefined") return;
-  const secure = typeof window !== "undefined" && window.location.protocol === "https:";
-  document.cookie = [
-    APPEARANCE_GENERATION_COOKIE + "=" + generation,
-    "path=/",
-    "max-age=" + APPEARANCE_COOKIE_MAX_AGE_SECONDS,
-    "samesite=lax",
-    secure ? "secure" : undefined,
-  ]
-    .filter(Boolean)
-    .join("; ");
+export function readAppearanceGeneration(): string | undefined {
+  return readAppearanceMetadata()?.epoch;
 }
 
 export function applyAppearanceFromCookie(): ResolvedAppearance {

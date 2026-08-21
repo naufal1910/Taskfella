@@ -1,10 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { authRoute, databaseFor, noStoreResponse, requireAuthCsrf } from "@/server/http/auth-route";
-import {
-  clearAppearanceCookie,
-  clearSessionCookie,
-  getSessionToken,
-} from "@/server/modules/auth/cookies";
+import { clearSessionCookie, getSessionToken } from "@/server/modules/auth/cookies";
 import { revokeSession } from "@/server/modules/auth/sessions";
 
 export const dynamic = "force-dynamic";
@@ -19,9 +16,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       await revokeSession(databaseFor(context), token, "logout");
     }
 
-    const response = noStoreResponse({ ok: true, status: "logged-out" }, 200, context);
+    const response = noStoreResponse(
+      { ok: true, status: "logged-out", appearanceEpoch: randomUUID() },
+      200,
+      context,
+    );
     clearSessionCookie(response, context.environment);
-    clearAppearanceCookie(response, context.environment);
     return response;
   });
 }

@@ -44,6 +44,7 @@ export function accountPayload(
   account: typeof accounts.$inferSelect,
   identities: AccountIdentities = [],
   appearanceRevision?: string,
+  appearanceEpoch?: string,
 ) {
   const pomodoro = {
     focusDurationMinutes: account.focusDurationMinutes,
@@ -66,6 +67,7 @@ export function accountPayload(
     appearance: account.appearance,
     appearanceRevision,
     appearanceIdentity: account.id,
+    appearanceEpoch,
     theme: account.appearance,
     notificationsEnabled: account.notificationsEnabled,
     notifications: account.notificationsEnabled,
@@ -100,17 +102,18 @@ export function accountPayload(
 async function accountResponse(
   account: typeof accounts.$inferSelect,
   appearanceRevision?: string,
+  appearanceEpoch?: string,
 ): Promise<NextResponse> {
   const identities = await listAccountOAuthIdentities(getDatabase(), account.id);
   return noStoreResponse({
     ok: true,
-    account: accountPayload(account, identities, appearanceRevision),
+    account: accountPayload(account, identities, appearanceRevision, appearanceEpoch),
   });
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
-  return protectedRoute(request, ({ account, accountVersion }) =>
-    accountResponse(account, accountVersion),
+  return protectedRoute(request, ({ account, accountVersion, appearanceEpoch }) =>
+    accountResponse(account, accountVersion, appearanceEpoch),
   );
 }
 
@@ -118,10 +121,7 @@ async function update(request: Request): Promise<NextResponse> {
   const operation = () =>
     protectedRoute(
       request,
-      async ({ account, accountVersion }) => {
-        if (request.headers.get("x-taskfella-account-id") !== account.id) {
-          throw new AppError("CONFLICT");
-        }
+      async ({ account, accountVersion, appearanceEpoch }) => {
         const patch = parseAccountSettingsPatch(await parseJsonObject(request));
         const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
         const database = getDatabase();
@@ -200,7 +200,11 @@ async function update(request: Request): Promise<NextResponse> {
           throw new Error("Account settings could not be saved.");
         }
 
-        return accountResponse(updated, String(updated.appearanceRevision));
+        return accountResponse(
+          updated,
+          String(updated.appearanceRevision),
+          appearanceEpoch,
+        );
       },
       { mutation: true },
     );

@@ -15,6 +15,7 @@ interface InitialAppearance {
   serverOwnsPreference: boolean;
   revision?: string;
   identity?: string;
+  generation?: string;
 }
 
 async function resolveInitialAppearance(): Promise<InitialAppearance> {
@@ -36,6 +37,7 @@ async function resolveInitialAppearance(): Promise<InitialAppearance> {
       serverOwnsPreference: true,
       revision: authenticated.accountVersion,
       identity: authenticated.account.id,
+      generation: authenticated.appearanceEpoch,
     };
   }
   return { preference: "system", serverOwnsPreference: true };
@@ -51,11 +53,24 @@ export function themeBootstrap(initialAppearance: InitialAppearance): string {
     var preference = serverPreference;
     if (!serverOwnsPreference && match) {
       try {
-        var cookiePreference = decodeURIComponent(match[1]);
+        var metadata = JSON.parse(decodeURIComponent(match[1]));
+        var cookiePreference = metadata.preference;
+        var validRevision =
+          metadata.revision === undefined ||
+          metadata.revision === "reset" ||
+          (typeof metadata.revision === "string" && /^\d+$/.test(metadata.revision));
+        var validIdentifier = function (value) {
+          return value === undefined ||
+            (typeof value === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(value));
+        };
         if (
-          cookiePreference === "system" ||
-          cookiePreference === "light" ||
-          cookiePreference === "dark"
+          metadata &&
+          validRevision &&
+          validIdentifier(metadata.identity) &&
+          validIdentifier(metadata.epoch) &&
+          (cookiePreference === "system" ||
+            cookiePreference === "light" ||
+            cookiePreference === "dark")
         ) {
           preference = cookiePreference;
         }
@@ -98,6 +113,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           serverOwnsPreference={initialAppearance.serverOwnsPreference}
           initialRevision={initialAppearance.revision}
           initialIdentity={initialAppearance.identity}
+          initialGeneration={initialAppearance.generation}
         />
         {children}
       </body>

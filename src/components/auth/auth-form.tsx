@@ -13,11 +13,12 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
   APPEARANCE_RESET_REVISION,
-  beginAppearanceAuthEpoch,
   cacheAppearancePreference,
   clearAppearancePreferenceCache,
+  currentAppearanceAuthEpoch,
   detectBrowserTimezone,
   notifyAppearanceChange,
+  setAppearanceAuthEpoch,
   type AppearancePreference,
 } from "@/components/theme/theme";
 import {
@@ -409,7 +410,8 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         setFieldErrors(nextFieldErrors);
         return;
       }
-      let lifecycleGeneration: number | undefined;
+      const requestGeneration = currentAppearanceAuthEpoch();
+      let lifecycleGeneration: string | undefined;
 
       const endpoint =
         mode === "signup"
@@ -452,10 +454,12 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           error?: ApiError;
           message?: string;
           status?: "pending" | "success";
+          appearanceEpoch?: string;
           account?: {
             id?: string;
             appearance?: AppearancePreference;
             appearanceRevision?: string;
+            appearanceEpoch?: string;
           };
         };
 
@@ -499,15 +503,18 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           }
         }
         if (mode === "login" || mode === "reset") {
-          lifecycleGeneration = beginAppearanceAuthEpoch();
+          lifecycleGeneration =
+            mode === "login" ? payload.account?.appearanceEpoch : payload.appearanceEpoch;
           if (mode === "reset") {
             clearAppearancePreferenceCache();
+            if (lifecycleGeneration) setAppearanceAuthEpoch(lifecycleGeneration, true);
           } else if (payload.account?.appearance) {
             cacheAppearancePreference(
               payload.account.appearance,
               payload.account.appearanceRevision,
               payload.account.id,
               lifecycleGeneration,
+              requestGeneration,
             );
           }
           notifyAppearanceChange(

@@ -3,24 +3,31 @@ import { describe, expect, it } from "vitest";
 import { themeBootstrap } from "@/app/layout";
 import {
   APPEARANCE_CHANGE_EVENT,
-  beginAppearanceAuthEpoch,
   cacheAppearancePreference,
   clearAppearancePreferenceCache,
   compareAppearanceRevisions,
   isAppearanceSnapshotCurrent,
   notifyAppearanceChange,
   readAppearancePreferenceFromCookie,
+  setAppearanceAuthEpoch,
   resolveAppearance,
 } from "@/components/theme/theme";
 
 describe("appearance resolution", () => {
+  function appearanceCookie(metadata: Record<string, unknown>): string {
+    return `taskfella_appearance=${encodeURIComponent(JSON.stringify(metadata))}`;
+  }
+
   function withCookieDocument(initialCookie: string, callback: () => void): void {
     const previousDocument = globalThis.document;
     const cookies = new Map(
-      initialCookie.split(";").map((part) => {
-        const separator = part.indexOf("=");
-        return [part.slice(0, separator).trim(), part.slice(separator + 1)] as const;
-      }),
+      initialCookie
+        .split(";")
+        .filter((part) => part.includes("="))
+        .map((part) => {
+          const separator = part.indexOf("=");
+          return [part.slice(0, separator).trim(), part.slice(separator + 1)] as const;
+        }),
     );
     const testDocument = {
       get cookie(): string {
@@ -76,7 +83,7 @@ describe("appearance resolution", () => {
     expect(
       runBootstrap(
         { preference: "dark", serverOwnsPreference: true },
-        "taskfella_appearance=light",
+        appearanceCookie({ preference: "light", revision: "0", epoch: "epoch-a" }),
         false,
       ),
     ).toEqual({ theme: "dark", colorScheme: "dark" });
@@ -90,6 +97,13 @@ describe("appearance resolution", () => {
         true,
       ),
     ).toEqual({ theme: "dark", colorScheme: "dark" });
+    expect(
+      runBootstrap(
+        { preference: "system", serverOwnsPreference: false },
+        appearanceCookie({ preference: "dark", revision: "not-a-revision" }),
+        false,
+      ),
+    ).toEqual({ theme: "light", colorScheme: "light" });
   });
 
   it("uses the system preference only for System", () => {
@@ -117,14 +131,14 @@ describe("appearance resolution", () => {
     try {
       notifyAppearanceChange("dark", "42", {
         authenticated: true,
-        generation: 2,
+        generation: "epoch-a",
         identity: "account-a",
       });
       expect(received).toEqual({
         preference: "dark",
         revision: "42",
         authenticated: true,
-        generation: 2,
+        generation: "epoch-a",
         identity: "account-a",
         reset: false,
       });
@@ -150,25 +164,57 @@ describe("appearance resolution", () => {
 
   it("does not let an older lifecycle response overwrite shared browser cache", () => {
     withCookieDocument(
-      "taskfella_appearance=dark; taskfella_appearance_revision=1; taskfella_appearance_identity=account-a; taskfella_appearance_generation=9",
+      appearanceCookie({
+        preference: "dark",
+        revision: "1",
+        identity: "account-a",
+        epoch: "epoch-new",
+      }),
       () => {
-        expect(isAppearanceSnapshotCurrent("0", "account-a", 8)).toBe(false);
-        expect(cacheAppearancePreference("light", "0", "account-a", 8)).toBe(false);
-        expect(document.cookie).toContain("taskfella_appearance=dark");
-        expect(document.cookie).toContain("taskfella_appearance_revision=1");
-        expect(document.cookie).toContain("taskfella_appearance_generation=9");
+        expect(isAppearanceSnapshotCurrent("0", "account-a", "epoch-old")).toBe(false);
+        expect(cacheAppearancePreference("light", "0", "account-a", "epoch-old")).toBe(false);
+        expect(document.cookie).toContain("taskfella_appearance=");
+        expect(decodeURIComponent(document.cookie.split("=")[1]!)).toContain('"dark"');
+        expect(document.cookie).not.toContain("appearance_revision");
       },
     );
   });
 
-  it("keeps the reset generation across appearance-cache clearing", () => {
-    withCookieDocument("taskfella_appearance_generation=12", () => {
+  it("writes preference and metadata as one validated cookie snapshot", () => {
+    withCookieDocument("", () => {
       clearAppearancePreferenceCache();
-      expect(document.cookie).toContain("taskfella_appearance_generation=12");
+      expect(cacheAppearancePreference("dark", "1", "account-a", "epoch-a")).toBe(true);
+      expect(document.cookie.split(";")).toHaveLength(1);
+      expect(decodeURIComponent(document.cookie.split("=")[1]!)).toEqual(
+        JSON.stringify({
+          preference: "dark",
+          revision: "1",
+          identity: "account-a",
+          epoch: "epoch-a",
+        }),
+      );
+    });
+  });
 
-      const nextGeneration = beginAppearanceAuthEpoch();
-      expect(nextGeneration).toBeGreaterThan(12);
-      expect(document.cookie).toContain(`taskfella_appearance_generation=${nextGeneration}`);
+  it("accepts a server-issued epoch transition from the request epoch", () => {
+    withCookieDocument(appearanceCookie({ preference: "light", epoch: "epoch-old" }), () => {
+      clearAppearancePreferenceCache();
+      document.cookie = appearanceCookie({ preference: "light", epoch: "epoch-old" });
+      expect(cacheAppearancePreference("dark", "1", "account-b", "epoch-new", "epoch-old")).toBe(
+        true,
+      );
+      expect(decodeURIComponent(document.cookie.split("=")[1]!)).toContain('"epoch":"epoch-new"');
+    });
+  });
+
+  it("keeps the reset generation across appearance-cache clearing", () => {
+    withCookieDocument(appearanceCookie({ preference: "dark", epoch: "epoch-old" }), () => {
+      clearAppearancePreferenceCache();
+      expect(document.cookie).not.toContain("taskfella_appearance=");
+
+      setAppearanceAuthEpoch("epoch-reset", true);
+      expect(document.cookie).toContain("taskfella_appearance=");
+      expect(decodeURIComponent(document.cookie.split("=")[1]!)).toContain('"epoch":"epoch-reset"');
     });
   });
 });
