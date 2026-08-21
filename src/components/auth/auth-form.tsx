@@ -409,8 +409,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         setFieldErrors(nextFieldErrors);
         return;
       }
-      const lifecycleGeneration =
-        mode === "login" || mode === "reset" ? beginAppearanceAuthEpoch() : undefined;
+      let lifecycleGeneration: number | undefined;
 
       const endpoint =
         mode === "signup"
@@ -500,6 +499,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           }
         }
         if (mode === "login" || mode === "reset") {
+          lifecycleGeneration = beginAppearanceAuthEpoch();
           if (mode === "reset") {
             clearAppearancePreferenceCache();
           } else if (payload.account?.appearance) {

@@ -11,6 +11,7 @@ import {
   isAppearanceSnapshotCurrent,
   isCurrentAppearanceAuthEpoch,
   notifyAppearanceChange,
+  readAppearanceCookie,
   APPEARANCE_RESET_REVISION,
   beginAppearanceAuthEpoch,
   type AppearancePreference,
@@ -309,24 +310,32 @@ export function SettingsPanel() {
         const payload = (await response.json()) as { account?: AccountPayload };
         if (!payload.account) throw new Error("account");
         if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
-        const preference = payload.account.appearance ?? "system";
+        const account = payload.account;
+        const preference = account.appearance ?? "system";
         const appearanceAccepted = cacheAppearancePreference(
           preference,
-          payload.account.appearanceRevision,
-          payload.account.id,
+          account.appearanceRevision,
+          account.id,
           requestGeneration,
         );
-        if (!appearanceAccepted) return;
-        setAccount(payload.account);
-        setValues(valuesFromAccount(payload.account));
-        savedAppearanceRevisionRef.current = payload.account.appearanceRevision;
-        savedAppearanceIdentityRef.current = payload.account.id;
+        if (!appearanceAccepted) {
+          setAccount((current) => current ?? account);
+          setValues((current) => {
+            if (current) return current;
+            return { ...valuesFromAccount(account), appearance: readAppearanceCookie() };
+          });
+          return;
+        }
+        setAccount(account);
+        setValues(valuesFromAccount(account));
+        savedAppearanceRevisionRef.current = account.appearanceRevision;
+        savedAppearanceIdentityRef.current = account.id;
         savedAppearanceGenerationRef.current = requestGeneration;
         appearanceMutationTrackerRef.current.recordSaved(preference);
         notifyAppearanceChange(preference, savedAppearanceRevisionRef.current, {
           authenticated: true,
           generation: requestGeneration,
-          identity: payload.account.id,
+          identity: account.id,
         });
       })
       .catch(() => {
@@ -418,20 +427,29 @@ export function SettingsPanel() {
           }
           throw new Error("save");
         }
-        if (
-          !isAppearanceSnapshotCurrent(
-            payload.account.appearanceRevision,
-            payload.account.id,
-            requestGeneration,
-          )
-        ) {
-          return;
-        }
-        setAccount(payload.account);
+        const appearanceAccepted = isAppearanceSnapshotCurrent(
+          payload.account.appearanceRevision,
+          payload.account.id,
+          requestGeneration,
+        );
+        const statePatch = appearanceAccepted
+          ? patch
+          : Object.fromEntries(Object.entries(patch).filter(([key]) => key !== "appearance"));
+        setAccount((current) =>
+          !current || appearanceAccepted
+            ? payload.account!
+            : {
+                ...payload.account!,
+                appearance: current.appearance,
+                appearanceRevision: current.appearanceRevision,
+              },
+        );
         setValues((current) =>
           current
-            ? valuesAfterSave(current, payload.account!, patch)
-            : valuesFromAccount(payload.account!),
+            ? valuesAfterSave(current, payload.account!, statePatch)
+            : appearanceAccepted
+              ? valuesFromAccount(payload.account!)
+              : { ...valuesFromAccount(payload.account!), appearance: readAppearanceCookie() },
         );
         setFieldErrors((current) => {
           const next = { ...current };
@@ -446,6 +464,7 @@ export function SettingsPanel() {
         const appearanceHasUnsavedEdit =
           appearanceMutationTrackerRef.current.hasUnsaved() &&
           !(appearancePatch && mutationIsCurrent);
+        if (!appearanceAccepted) return;
         const preference = payload.account.appearance ?? "system";
         const revision = payload.account.appearanceRevision;
         const savedRevision = savedAppearanceRevisionRef.current;
