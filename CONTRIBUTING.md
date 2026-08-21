@@ -1,6 +1,6 @@
 # Contributing to Taskfella
 
-Thank you for helping build Taskfella. Phase 1C includes Google OAuth and explicit identity linking, and Phase 1D adds account settings and appearance on the Phase 1A/1B/1C authentication foundation; please check the [public roadmap](https://github.com/users/naufal1910/projects/4), [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2), [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13), [Phase 1B issue](https://github.com/naufal1910/Taskfella/issues/14), [Phase 1C issue](https://github.com/naufal1910/Taskfella/issues/15), [Phase 1D issue](https://github.com/naufal1910/Taskfella/issues/16), [Calm Execution UI foundation issue](https://github.com/naufal1910/Taskfella/issues/19), [Phase 1A notes](docs/implementation/taskfella-phase1a-auth.md), [Phase 1B notes](docs/implementation/taskfella-phase1b-auth.md), [Phase 1C notes](docs/implementation/taskfella-phase1c-google-oauth.md), and [Phase 1D notes](docs/implementation/taskfella-phase1d-settings.md) before starting product work.
+Thank you for helping build Taskfella. Phase 1E is the current verified phase, covering the Phase 1A–1D authentication and account experience plus integrated browser, security, database, and readiness checks; please check the [public roadmap](https://github.com/users/naufal1910/projects/4), [Phase 0 issue](https://github.com/naufal1910/Taskfella/issues/2), [Phase 1A issue](https://github.com/naufal1910/Taskfella/issues/13), [Phase 1B issue](https://github.com/naufal1910/Taskfella/issues/14), [Phase 1C issue](https://github.com/naufal1910/Taskfella/issues/15), [Phase 1D issue](https://github.com/naufal1910/Taskfella/issues/16), [Phase 1E issue](https://github.com/naufal1910/Taskfella/issues/17), [Calm Execution UI foundation issue](https://github.com/naufal1910/Taskfella/issues/19), [Phase 1A notes](docs/implementation/taskfella-phase1a-auth.md), [Phase 1B notes](docs/implementation/taskfella-phase1b-auth.md), [Phase 1C notes](docs/implementation/taskfella-phase1c-google-oauth.md), [Phase 1D notes](docs/implementation/taskfella-phase1d-settings.md), and the [Phase 1E verification record](docs/implementation/taskfella-phase1e-verification.md) before starting product work.
 
 ## Development setup
 
@@ -15,6 +15,12 @@ pnpm dev
 ```
 
 Do not put real credentials in `.env.example`, source files, tests, commits, or pull requests. `.env` is ignored and local PostgreSQL values are development-only placeholders. See the [foundation operations guide](docs/operations.md) for local transactional-message capture and production delivery guidance.
+
+## Phase 1E authentication verification
+
+The verified local workflow keeps `AUTH_TRUSTED_PROXY=false`, `EMAIL_DELIVERY_MODE=local`, and Google credentials unset. Use only local PostgreSQL, mode-0600 mail artifacts, mocked Google providers, and disposable test accounts. After migrating the database, run `pnpm db:check` before relying on readiness or integration results. With `pnpm dev` running, follow the [Phase 1E verification record](docs/implementation/taskfella-phase1e-verification.md) with `chrome-devtools-axi` at desktop and 390×844 viewports; do not use real external credentials.
+
+When authentication or account settings change, reconcile the user-facing README, [operations guide](docs/operations.md), `.env.example`, relevant implementation note, [documentation index](docs/README.md), and this guide, then update the Phase 1E evidence record when its verified behavior changes.
 
 ## Visual foundation
 
@@ -35,6 +41,7 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm db:migrate
+pnpm db:check
 pnpm test
 pnpm build
 ```

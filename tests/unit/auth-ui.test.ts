@@ -7,7 +7,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/login",
 }));
 
-import { AccountState } from "@/components/auth/account-state";
+import { AccountState, accountLinkErrorMessage } from "@/components/auth/account-state";
 import VerifyEmailPage from "@/app/verify-email/page";
 import ResetPasswordPage from "@/app/reset-password/page";
 import {
@@ -16,6 +16,7 @@ import {
   authErrorMessage,
   classifyAuthErrorCode,
   CompletionState,
+  shouldStartVerificationAttempt,
   TokenState,
 } from "@/components/auth/auth-form";
 import { AuthPage } from "@/components/auth/auth-page";
@@ -69,6 +70,13 @@ describe("authentication lifecycle UI", () => {
     expect(reset).not.toContain('name="token"');
   });
 
+  it("starts one verification attempt per effective hash token", () => {
+    expect(shouldStartVerificationAttempt(undefined, "first-token")).toBe(true);
+    expect(shouldStartVerificationAttempt("first-token", "first-token")).toBe(false);
+    expect(shouldStartVerificationAttempt("first-token", "second-token")).toBe(true);
+    expect(shouldStartVerificationAttempt("first-token", undefined)).toBe(false);
+  });
+
   it("preserves an explicit pending verification state and keeps the bearer value out of markup", () => {
     const html = markup(createElement(AuthForm, { mode: "verify", token: "secret-token" }));
 
@@ -92,6 +100,12 @@ describe("authentication lifecycle UI", () => {
     expect(html).toContain('class="auth-feedback auth-feedback--pending"');
     expect(html).toContain('role="status"');
     expect(html).not.toContain("Complete");
+  });
+
+  it("maps unconfigured account linking to an actionable safe UI state", () => {
+    expect(accountLinkErrorMessage("OAUTH_NOT_CONFIGURED")).toContain("not configured");
+    expect(accountLinkErrorMessage("OAUTH_NOT_CONFIGURED")).toContain("email and password");
+    expect(accountLinkErrorMessage()).toContain("safely");
   });
 
   it("maps security-sensitive and recoverable failures to safe UI copy", () => {

@@ -29,7 +29,7 @@ Using `chrome-devtools-axi` against the migrated local app at desktop and 390×8
 - switching from one verified local account to another without showing the first account's content;
 - account settings for display name, strict IANA timezone validation, System/Light/Dark appearance, notifications, sound, and Pomodoro values, including persistence after navigation and reload;
 - keyboard-only form submission, visible focus, field-associated errors, live pending/success/error announcements, and touch-sized mobile controls;
-- the Google action's clear no-credential local state and the explicit account-linking ceremony through mocked provider callbacks.
+- the Google sign-in action's clear no-credential local state, the actionable no-credential account-linking response, and the explicit configured account-linking ceremony through mocked provider callbacks.
 
 The root pre-paint bootstrap was checked for authenticated preference authority and no-flash System/Light/Dark transitions. Logout, login, account-switch, and password-reset transitions replace the appearance epoch and reject stale client responses. Immediate live synchronization between independent windows remains intentionally out of scope; navigation and reload synchronization are covered.
 

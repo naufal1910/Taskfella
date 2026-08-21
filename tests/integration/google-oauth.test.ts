@@ -282,6 +282,29 @@ integration("Google OAuth and explicit identity linking", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  it("returns a provider URL for configured JSON linking requests", async () => {
+    if (!db) return;
+    const owner = await accountWithPassword(uniqueEmail("json-link"));
+    const provider = providerFor({
+      subject: `google-subject-${crypto.randomUUID()}`,
+      email: owner.email,
+    });
+    const response = await startGoogleAuthorization(startRequest("link", owner.session), {
+      db,
+      environment,
+      provider,
+      responseMode: "json",
+    });
+    const payload = (await response.json()) as { authorizationUrl?: string };
+    const state = cookieValue(response, "taskfella_oauth_state");
+    if (state) createdStateHashes.push(hashBearerToken(state));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(payload.authorizationUrl).toMatch(/^https:\/\/accounts\.google\.test\/authorize\?/);
+    expect(state).toBeTruthy();
+  });
+
   it("links explicitly, rotates the linking session, and keeps provider subjects private", async () => {
     if (!db) return;
     const email = uniqueEmail("explicit-link");

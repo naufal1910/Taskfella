@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@/server/http/errors";
+import { authRoute } from "@/server/http/auth-route";
 import { type Database } from "@/server/db/client";
 import {
   createGoogleCodeChallenge,
@@ -37,6 +38,39 @@ describe("Google OAuth boundary", () => {
       "http://localhost:3000/login?oauth=not-configured",
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("returns an actionable JSON outcome when account linking lacks configuration", async () => {
+    const unconfigured = {
+      ...environment,
+      GOOGLE_CLIENT_ID: undefined,
+      GOOGLE_CLIENT_SECRET: undefined,
+    };
+    const request = new Request("http://localhost:3000/api/auth/google?intent=link", {
+      method: "POST",
+      headers: { accept: "application/json" },
+    });
+    const response = await authRoute(
+      request,
+      () =>
+        startGoogleAuthorization(request, {
+          db: {} as Database,
+          environment: unconfigured,
+          responseMode: "json",
+        }),
+      { db: {} as Database, environment: unconfigured },
+    );
+    const payload = (await response.json()) as {
+      error?: { code?: string; message?: string };
+    };
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(payload.error).toEqual({
+      code: "OAUTH_NOT_CONFIGURED",
+      message: "Google linking is not configured for this environment.",
+    });
+    expect(JSON.stringify(payload)).not.toContain("client-secret");
   });
 
   it("clearly reports absent local configuration without returning provider material", () => {

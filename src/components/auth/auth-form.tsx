@@ -72,6 +72,13 @@ function isTokenErrorCode(code: string | undefined): code is TokenErrorCode {
   return code !== undefined && tokenErrorCodes.has(code as TokenErrorCode);
 }
 
+export function shouldStartVerificationAttempt(
+  attemptedToken: string | undefined,
+  effectiveToken: string | undefined,
+): effectiveToken is string {
+  return Boolean(effectiveToken) && attemptedToken !== effectiveToken;
+}
+
 function readCookie(name: string): string | undefined {
   const prefix = `${name}=`;
   for (const part of document.cookie.split(";")) {
@@ -414,7 +421,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [errorCode, setErrorCode] = useState<string | undefined>();
   const [error, setError] = useState<string>();
-  const verificationStarted = useRef(false);
+  const verificationAttemptToken = useRef<string | undefined>(undefined);
   const content =
     isTokenMode && mode !== "reset" ? undefined : mode === "resend" ? undefined : copy[mode];
 
@@ -423,6 +430,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
       event?.preventDefault();
       if ((mode === "verify" || mode === "reset") && !effectiveToken) return;
 
+      const submittedToken = effectiveToken;
       setPending(true);
       setAccepted(undefined);
       setError(undefined);
@@ -493,6 +501,9 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           (mode === "login" || mode === "reset") &&
           !isCurrentAppearanceAuthEpoch(requestGeneration)
         ) {
+          return;
+        }
+        if (mode === "verify" && verificationAttemptToken.current !== submittedToken) {
           return;
         }
 
@@ -566,10 +577,13 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           router.push("/account");
         }
       } catch {
+        if (mode === "verify" && verificationAttemptToken.current !== submittedToken) return;
         setErrorCode("NETWORK_ERROR");
         setError("We could not reach Taskfella. Check your connection and try again.");
       } finally {
-        setPending(false);
+        if (mode !== "verify" || verificationAttemptToken.current === submittedToken) {
+          setPending(false);
+        }
       }
     },
     [confirmation, effectiveToken, email, mode, password, router],
@@ -584,8 +598,23 @@ export function AuthForm({ mode, token }: AuthFormProps) {
   }, [fieldErrors, mode]);
 
   useEffect(() => {
-    if (!isVerify || !effectiveToken || verificationStarted.current) return;
-    verificationStarted.current = true;
+    if (!isVerify) {
+      verificationAttemptToken.current = undefined;
+      return;
+    }
+    if (!effectiveToken) {
+      if (verificationAttemptToken.current === undefined) return;
+      verificationAttemptToken.current = undefined;
+      setPending(false);
+      setAccepted(undefined);
+      setSuccess(undefined);
+      setFieldErrors({});
+      setErrorCode(undefined);
+      setError(undefined);
+      return;
+    }
+    if (!shouldStartVerificationAttempt(verificationAttemptToken.current, effectiveToken)) return;
+    verificationAttemptToken.current = effectiveToken;
     void submit();
   }, [effectiveToken, isVerify, submit]);
 

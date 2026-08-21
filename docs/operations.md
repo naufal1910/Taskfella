@@ -38,7 +38,7 @@ Verification and password-reset links carry their one-time value in a URL fragme
 
 ## Google OAuth
 
-Google credentials are optional in local development. If they are omitted, the browser Google sign-in action redirects to a clear `oauth=not-configured` state and email/password authentication remains available. If either value is supplied, both must be supplied and valid; production startup refuses missing, partial, or malformed configuration.
+Google credentials are optional in local development. If they are omitted, the browser Google sign-in action redirects to a clear `oauth=not-configured` state, and the authenticated Link Google account action returns a safe `OAUTH_NOT_CONFIGURED` response that directs the account holder to continue with email/password or ask an administrator to enable Google. Email/password authentication remains available. If either value is supplied, both must be supplied and valid; production startup refuses missing, partial, or malformed configuration.
 
 Use a Google OAuth **Web application** client and register this exact callback URL:
 

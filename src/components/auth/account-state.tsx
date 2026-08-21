@@ -55,6 +55,20 @@ async function csrfToken(): Promise<string> {
   return token;
 }
 
+export function accountLinkErrorMessage(code?: string): string {
+  switch (code) {
+    case "OAUTH_NOT_CONFIGURED":
+      return "Google linking is not configured here. Continue with email and password, or ask an administrator to enable it.";
+    case "RATE_LIMITED":
+      return "Too many Google linking attempts. Wait a while and try again.";
+    case "UNAUTHORIZED":
+    case "OAUTH_SESSION_INVALID":
+      return "Your account session expired. Sign in again before linking Google.";
+    default:
+      return "We could not start Google linking safely. Try again.";
+  }
+}
+
 function LogoutControl() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -148,6 +162,8 @@ function oauthMessage(status: string | null): string | undefined {
       return "That Google email belongs to another Taskfella account. Nothing was changed.";
     case "session-expired":
       return "Your account session expired before linking completed. Sign in and try again.";
+    case "not-configured":
+      return accountLinkErrorMessage("OAUTH_NOT_CONFIGURED");
     case "provider-error":
       return "Google sign-in could not be completed. Try again without changing your account.";
     case "cancelled":
@@ -185,11 +201,19 @@ export function AccountState() {
       });
       const payload = (await response.json().catch(() => ({}))) as {
         authorizationUrl?: string;
+        error?: { code?: string };
       };
-      if (!response.ok || !payload.authorizationUrl) throw new Error("link");
+      if (!response.ok) {
+        setLinkError(accountLinkErrorMessage(payload.error?.code));
+        return;
+      }
+      if (!payload.authorizationUrl) {
+        setLinkError(accountLinkErrorMessage());
+        return;
+      }
       window.location.assign(payload.authorizationUrl);
     } catch {
-      setLinkError("We could not start Google linking safely. Try again.");
+      setLinkError(accountLinkErrorMessage());
     } finally {
       setLinkPending(false);
     }
