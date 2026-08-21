@@ -12,6 +12,8 @@ import {
   isCurrentAppearanceAuthEpoch,
   notifyAppearanceChange,
   readAppearanceCookie,
+  readAppearanceIdentity,
+  readAppearanceRevision,
   APPEARANCE_RESET_REVISION,
   beginAppearanceAuthEpoch,
   type AppearancePreference,
@@ -319,10 +321,30 @@ export function SettingsPanel() {
           requestGeneration,
         );
         if (!appearanceAccepted) {
-          setAccount((current) => current ?? account);
+          const fallbackPreference = readAppearanceCookie();
+          const fallbackRevision = readAppearanceRevision();
+          const fallbackIdentity = readAppearanceIdentity();
+          const acceptedRevision = fallbackIdentity === account.id ? fallbackRevision : undefined;
+          setAccount(
+            (current) =>
+              current ?? {
+                ...account,
+                appearance: fallbackPreference,
+                appearanceRevision: acceptedRevision,
+              },
+          );
           setValues((current) => {
             if (current) return current;
-            return { ...valuesFromAccount(account), appearance: readAppearanceCookie() };
+            return { ...valuesFromAccount(account), appearance: fallbackPreference };
+          });
+          savedAppearanceRevisionRef.current = acceptedRevision;
+          savedAppearanceIdentityRef.current = account.id;
+          savedAppearanceGenerationRef.current = requestGeneration;
+          appearanceMutationTrackerRef.current.recordSaved(fallbackPreference);
+          notifyAppearanceChange(fallbackPreference, acceptedRevision, {
+            authenticated: true,
+            generation: requestGeneration,
+            identity: account.id,
           });
           return;
         }
@@ -370,13 +392,20 @@ export function SettingsPanel() {
   async function save(section: Section, patch: Record<string, unknown>): Promise<void> {
     const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
     const requestGeneration = currentAppearanceAuthEpoch();
+    const requestIdentity = savedAppearanceIdentityRef.current;
+    if (!requestIdentity) return;
     const appearanceMutationId = appearancePatch
       ? appearanceMutationTrackerRef.current.advance()
       : appearanceMutationTrackerRef.current.current();
     setStatus(undefined);
     setError(undefined);
     const execute = async (): Promise<void> => {
-      if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
+      if (
+        !isCurrentAppearanceAuthEpoch(requestGeneration) ||
+        requestIdentity !== savedAppearanceIdentityRef.current
+      ) {
+        return;
+      }
       if (
         appearancePatch &&
         appearanceMutationId !== undefined &&
@@ -389,13 +418,21 @@ export function SettingsPanel() {
       saveControllersRef.current.add(controller);
       setSectionPending(section, true);
       try {
+        const csrf = await csrfToken(controller.signal);
+        if (
+          controller.signal.aborted ||
+          !isCurrentAppearanceAuthEpoch(requestGeneration) ||
+          requestIdentity !== savedAppearanceIdentityRef.current
+        ) {
+          return;
+        }
         const response = await fetch("/api/account", {
           method: "PATCH",
           credentials: "same-origin",
           cache: "no-store",
           headers: {
             "content-type": "application/json",
-            "x-csrf-token": await csrfToken(controller.signal),
+            "x-csrf-token": csrf,
           },
           signal: controller.signal,
           body: JSON.stringify(patch),
@@ -405,7 +442,12 @@ export function SettingsPanel() {
           error?: ApiError;
         };
         if (controller.signal.aborted) return;
-        if (!isCurrentAppearanceAuthEpoch(requestGeneration)) return;
+        if (
+          !isCurrentAppearanceAuthEpoch(requestGeneration) ||
+          requestIdentity !== savedAppearanceIdentityRef.current
+        ) {
+          return;
+        }
         if (response.status === 401) {
           invalidatePendingSaves();
           clearAppearancePreferenceCache();

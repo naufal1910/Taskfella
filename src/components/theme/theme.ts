@@ -169,7 +169,36 @@ export function cacheAppearancePreference(
   generation?: number,
 ): boolean {
   if (typeof document === "undefined") return false;
-  if (!isAppearanceSnapshotCurrent(revision, identity, generation)) return false;
+  if (!isAppearanceSnapshotCurrent(revision, identity, generation)) {
+    const sharedRevision = readAppearanceRevision();
+    const sharedIdentity = readAppearanceIdentity();
+    const sharedGeneration = readAppearanceGeneration();
+    const sharedStateIsNewer =
+      (generation !== undefined &&
+        sharedGeneration !== undefined &&
+        generation < sharedGeneration) ||
+      (revision !== undefined &&
+        sharedRevision !== undefined &&
+        identity === sharedIdentity &&
+        compareAppearanceRevisions(revision, sharedRevision) < 0);
+    const localStateIsNewer =
+      (generation !== undefined &&
+        cachedAppearanceGeneration !== undefined &&
+        generation < cachedAppearanceGeneration) ||
+      (revision !== undefined &&
+        cachedAppearanceRevision !== undefined &&
+        identity === cachedAppearanceIdentity &&
+        compareAppearanceRevisions(revision, cachedAppearanceRevision) < 0);
+    if (!sharedStateIsNewer && localStateIsNewer && cachedAppearancePreference) {
+      writeAppearanceCache(
+        cachedAppearancePreference,
+        cachedAppearanceRevision,
+        cachedAppearanceIdentity,
+        cachedAppearanceGeneration,
+      );
+    }
+    return false;
+  }
   cachedAppearancePreference = preference;
   cachedAppearanceRevision = revision;
   cachedAppearanceIdentity = identity;
