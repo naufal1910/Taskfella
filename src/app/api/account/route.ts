@@ -119,6 +119,9 @@ async function update(request: Request): Promise<NextResponse> {
     protectedRoute(
       request,
       async ({ account, accountVersion }) => {
+        if (request.headers.get("x-taskfella-account-id") !== account.id) {
+          throw new AppError("CONFLICT");
+        }
         const patch = parseAccountSettingsPatch(await parseJsonObject(request));
         const appearancePatch = Object.prototype.hasOwnProperty.call(patch, "appearance");
         const database = getDatabase();

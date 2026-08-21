@@ -24,7 +24,7 @@ async function makeAccount(prefix: string, settings: Partial<AccountSettings> = 
 function authenticatedRequest(
   pathname: string,
   session: string,
-  options: { method?: string; body?: unknown; csrf?: string } = {},
+  options: { method?: string; body?: unknown; csrf?: string; accountId?: string } = {},
 ): Request {
   const csrf = options.csrf ?? `csrf-${crypto.randomUUID()}`;
   const headers = new Headers({
@@ -33,6 +33,7 @@ function authenticatedRequest(
     "x-csrf-token": csrf,
   });
   if (options.body !== undefined) headers.set("content-type", "application/json");
+  if (options.accountId) headers.set("x-taskfella-account-id", options.accountId);
   return new Request(`http://localhost:3000${pathname}`, {
     method: options.method ?? "GET",
     headers,
@@ -87,6 +88,7 @@ integration("Phase 1D account settings routes", () => {
     const unchangedPut = await updateAccount(
       authenticatedRequest("/api/account", session.token, {
         method: "PUT",
+        accountId: owner.id,
         body: { appearance: "system" },
       }),
     );
@@ -104,6 +106,7 @@ integration("Phase 1D account settings routes", () => {
     const updated = await updateAccount(
       authenticatedRequest("/api/account", session.token, {
         method: "PATCH",
+        accountId: owner.id,
         body: {
           displayName: "  Focused owner ",
           timezone: "Asia/Tokyo",
@@ -141,6 +144,7 @@ integration("Phase 1D account settings routes", () => {
     const unchangedCompoundPut = await updateAccount(
       authenticatedRequest("/api/account", session.token, {
         method: "PUT",
+        accountId: owner.id,
         body: {
           displayName: "Focused owner",
           timezone: "Asia/Tokyo",
@@ -244,6 +248,7 @@ integration("Phase 1D account settings routes", () => {
       const response = await updateAccount(
         authenticatedRequest("/api/account", ownerSession.token, {
           method: "PATCH",
+          accountId: owner.id,
           body,
         }),
       );
@@ -252,6 +257,19 @@ integration("Phase 1D account settings routes", () => {
       expect(payload).toMatchObject({ error: { code: "INVALID_REQUEST" } });
       expect(JSON.stringify(payload)).not.toContain(other.email);
     }
+
+    const otherSession = await createSession(db, other.id);
+    const sessionBindingMismatch = await updateAccount(
+      authenticatedRequest("/api/account", otherSession.token, {
+        method: "PATCH",
+        accountId: owner.id,
+        body: { displayName: "Must not cross accounts" },
+      }),
+    );
+    expect(sessionBindingMismatch.status).toBe(409);
+    expect(await json(sessionBindingMismatch)).toMatchObject({
+      error: { code: "CONFLICT" },
+    });
 
     const [ownerAfterInvalid, otherAfterInvalid] = await Promise.all(
       [owner.id, other.id].map((id) => db.select().from(accounts).where(eq(accounts.id, id))),
@@ -269,12 +287,14 @@ integration("Phase 1D account settings routes", () => {
       updateAccount(
         authenticatedRequest("/api/account", session.token, {
           method: "PATCH",
+          accountId: owner.id,
           body: { displayName: "Concurrent owner" },
         }),
       ),
       updateAccount(
         authenticatedRequest("/api/account", session.token, {
           method: "PATCH",
+          accountId: owner.id,
           body: { timezone: "Europe/Berlin" },
         }),
       ),

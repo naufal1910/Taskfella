@@ -433,6 +433,7 @@ export function SettingsPanel() {
           headers: {
             "content-type": "application/json",
             "x-csrf-token": csrf,
+            "x-taskfella-account-id": requestIdentity,
           },
           signal: controller.signal,
           body: JSON.stringify(patch),

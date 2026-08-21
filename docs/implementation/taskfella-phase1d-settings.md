@@ -18,7 +18,7 @@ The persisted fields are:
 - long-break duration in minutes: 1–120;
 - long-break interval: 1–12 completed focus sessions.
 
-The database checks the appearance and Pomodoro bounds. The route validates all input types, display-name controls, and timezone identifiers before any update. Updates are scoped to the account resolved from the opaque session; a client account ID is not accepted as an authorization input. Responses are `no-store`, mutation requests require the existing same-origin and double-submit CSRF checks, and invalid input uses the safe generic `INVALID_REQUEST` response.
+The database checks the appearance and Pomodoro bounds. The route validates all input types, display-name controls, and timezone identifiers before any update. Updates are scoped to the account resolved from the opaque session; a loaded account identity may be sent only as a server-verified mismatch precondition and never selects the target account. Responses are `no-store`, mutation requests require the existing same-origin and double-submit CSRF checks, and invalid input uses the safe generic `INVALID_REQUEST` response.
 
 Each PATCH changes only the supplied fields and uses one database update, so concurrent updates to separate settings do not overwrite an unrelated field. Settings affect new focus sessions only; a future timer implementation must snapshot values when a session starts.
 
