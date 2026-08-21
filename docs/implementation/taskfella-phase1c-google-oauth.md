@@ -60,4 +60,4 @@ pnpm build
 
 OAuth behavior tests use a mocked provider boundary and local placeholder configuration only. They do not contain credentials, authorization codes, access/refresh tokens, or raw session fixtures.
 
-The disposable browser target used for this worktree closed before navigation, so no screenshot evidence was collected. The rendered authentication states were instead verified through the real Next.js route responses, response headers, callback redirects, and focused HTTP/HTML checks; this limitation is recorded here rather than treated as successful browser automation. The HTTP evidence included `GET /login` and `GET /signup` containing the Google action, no-cache/no-store response headers, the clear `503 OAUTH_NOT_CONFIGURED` local response, and the safe callback redirect to `/login?oauth=not-configured`.
+The integrated browser, security, leakage, and readiness evidence for this behavior is maintained in the [Phase 1E verification record](taskfella-phase1e-verification.md). The configured-path OAuth tests continue to use a mocked provider and local placeholders; no external credential or human-only login is required.

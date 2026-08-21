@@ -118,7 +118,10 @@ export function createApplicationLink(
   environment: AppEnv = getEnvironment(),
 ): string {
   const link = new URL(pathname, environment.APP_URL);
-  link.searchParams.set("token", token);
+  // Keep the one-time bearer out of request URLs, server logs, referrers, and
+  // server-rendered HTML. The client submits it over the existing CSRF-bound
+  // POST after reading the fragment.
+  link.hash = new URLSearchParams({ token }).toString();
   return link.toString();
 }
 

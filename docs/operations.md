@@ -26,7 +26,7 @@ Responses include request and correlation IDs for support while excluding connec
 
 ## Authentication client addresses
 
-`AUTH_TRUSTED_PROXY=false` is safe for direct local development and rejects forwarding headers. Production configuration requires `AUTH_TRUSTED_PROXY=true` and a reverse proxy that strips incoming `X-Real-IP` and `X-Forwarded-For` values before setting one from the connecting client. Requests without a valid trusted address are rejected instead of sharing one production rate-limit bucket.
+`AUTH_TRUSTED_PROXY=false` is safe for direct local development and rejects client-supplied forwarding headers. The repository's Next development proxy marks its own forwarding hop so browser mutations still use one bounded local rate-limit bucket. Production configuration requires `AUTH_TRUSTED_PROXY=true` and a reverse proxy that strips incoming `X-Real-IP` and `X-Forwarded-For` values before setting one from the connecting client. Requests without a valid trusted address are rejected instead of sharing one production rate-limit bucket.
 
 ## Local transactional email
 
@@ -34,9 +34,11 @@ Phase 1B defaults non-production environments to `EMAIL_DELIVERY_MODE=local`. Ve
 
 Production startup rejects local delivery. Set `AUTH_TRUSTED_PROXY=true` behind the trusted edge, then set `EMAIL_DELIVERY_MODE=smtp`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM`, and configure the documented port, TLS mode, and optional paired SMTP credentials. The app uses the portable SMTP transport and never falls back to local capture.
 
+Verification and password-reset links carry their one-time value in a URL fragment. The browser submits the value only through the existing CSRF-protected API mutation, keeping bearer values out of server request logs and referrers. Existing query-style links remain accepted by the client during the transition.
+
 ## Google OAuth
 
-Google credentials are optional in local development. If they are omitted, the Google sign-in action reports that it is not configured and email/password authentication remains available. If either value is supplied, both must be supplied and valid; production startup refuses missing, partial, or malformed configuration.
+Google credentials are optional in local development. If they are omitted, the browser Google sign-in action redirects to a clear `oauth=not-configured` state and email/password authentication remains available. If either value is supplied, both must be supplied and valid; production startup refuses missing, partial, or malformed configuration.
 
 Use a Google OAuth **Web application** client and register this exact callback URL:
 

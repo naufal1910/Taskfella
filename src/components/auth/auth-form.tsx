@@ -17,6 +17,7 @@ import {
   clearAppearancePreferenceCache,
   currentAppearanceAuthEpoch,
   detectBrowserTimezone,
+  isCurrentAppearanceAuthEpoch,
   notifyAppearanceChange,
   setAppearanceAuthEpoch,
   type AppearancePreference,
@@ -83,6 +84,31 @@ function readCookie(name: string): string | undefined {
     }
   }
   return undefined;
+}
+
+function readLocationToken(): string | undefined {
+  const queryToken = new URLSearchParams(window.location.search).get("token");
+  const hashToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("token");
+  const token = queryToken ?? hashToken;
+  return token && token.length <= 512 ? token : undefined;
+}
+
+function subscribeToTokenLocation(onChange: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener("hashchange", onChange);
+  window.addEventListener("popstate", onChange);
+  return () => {
+    window.removeEventListener("hashchange", onChange);
+    window.removeEventListener("popstate", onChange);
+  };
+}
+
+function currentTokenLocation(): string {
+  return typeof window === "undefined" ? "" : (readLocationToken() ?? "");
+}
+
+function serverTokenLocation(): string {
+  return "";
 }
 
 async function getCsrfToken(): Promise<string> {
@@ -365,6 +391,14 @@ export function CompletionState({ mode, message }: { mode: "verify" | "reset"; m
 }
 
 export function AuthForm({ mode, token }: AuthFormProps) {
+  const isVerify = mode === "verify";
+  const isTokenMode = mode === "verify" || mode === "reset";
+  const locationToken = useSyncExternalStore(
+    subscribeToTokenLocation,
+    currentTokenLocation,
+    serverTokenLocation,
+  );
+  const effectiveToken = token ?? (locationToken || undefined);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -374,28 +408,20 @@ export function AuthForm({ mode, token }: AuthFormProps) {
     serverOAuthStatus,
   );
   const router = useRouter();
-  const [pending, setPending] = useState(mode === "verify" && Boolean(token));
+  const [pending, setPending] = useState(mode === "verify" && Boolean(effectiveToken));
   const [accepted, setAccepted] = useState<string>();
   const [success, setSuccess] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
-  const [errorCode, setErrorCode] = useState<string | undefined>(
-    (mode === "verify" || mode === "reset") && !token ? "TOKEN_INVALID" : undefined,
-  );
-  const [error, setError] = useState<string | undefined>(
-    (mode === "verify" || mode === "reset") && !token
-      ? authErrorMessage("TOKEN_INVALID")
-      : undefined,
-  );
+  const [errorCode, setErrorCode] = useState<string | undefined>();
+  const [error, setError] = useState<string>();
   const verificationStarted = useRef(false);
-  const isVerify = mode === "verify";
-  const isTokenMode = mode === "verify" || mode === "reset";
   const content =
     isTokenMode && mode !== "reset" ? undefined : mode === "resend" ? undefined : copy[mode];
 
   const submit = useCallback(
     async (event?: FormEvent<HTMLFormElement>): Promise<void> => {
       event?.preventDefault();
-      if ((mode === "verify" || mode === "reset") && !token) return;
+      if ((mode === "verify" || mode === "reset") && !effectiveToken) return;
 
       setPending(true);
       setAccepted(undefined);
@@ -429,9 +455,9 @@ export function AuthForm({ mode, token }: AuthFormProps) {
       const browserTimezone = mode === "signup" ? detectBrowserTimezone() : undefined;
       const body =
         mode === "verify"
-          ? { token }
+          ? { token: effectiveToken }
           : mode === "reset"
-            ? { token, password }
+            ? { token: effectiveToken, password }
             : mode === "signup"
               ? { email, password, ...(browserTimezone ? { timezone: browserTimezone } : {}) }
               : mode === "login"
@@ -462,6 +488,13 @@ export function AuthForm({ mode, token }: AuthFormProps) {
             appearanceEpoch?: string;
           };
         };
+
+        if (
+          (mode === "login" || mode === "reset") &&
+          !isCurrentAppearanceAuthEpoch(requestGeneration)
+        ) {
+          return;
+        }
 
         if (!response.ok) {
           const apiFieldErrors =
@@ -539,7 +572,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         setPending(false);
       }
     },
-    [confirmation, email, mode, password, router, token],
+    [confirmation, effectiveToken, email, mode, password, router],
   );
 
   useEffect(() => {
@@ -551,12 +584,12 @@ export function AuthForm({ mode, token }: AuthFormProps) {
   }, [fieldErrors, mode]);
 
   useEffect(() => {
-    if (!isVerify || !token || verificationStarted.current) return;
+    if (!isVerify || !effectiveToken || verificationStarted.current) return;
     verificationStarted.current = true;
     void submit();
-  }, [isVerify, submit, token]);
+  }, [effectiveToken, isVerify, submit]);
 
-  const tokenMissing = isTokenMode && !token;
+  const tokenMissing = isTokenMode && !effectiveToken;
   if (isVerify && success) {
     return <CompletionState mode="verify" message={success} />;
   }

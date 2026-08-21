@@ -8,6 +8,8 @@ import { logger } from "@/server/observability/logger";
 import { validateCsrfRequest } from "@/server/modules/auth/csrf";
 import { AUTH_RATE_LIMITS, consumeRateLimit } from "@/server/modules/auth/rate-limit";
 
+export const LOCAL_PROXY_MARKER = "x-taskfella-local-proxy";
+
 export interface AuthRouteOptions {
   db?: Database;
   environment?: AppEnv;
@@ -96,10 +98,21 @@ export async function parseJsonObject(request: Request): Promise<Record<string, 
   return value as Record<string, unknown>;
 }
 
-function clientSubject(request: Request, environment: AppEnv): string {
+export function clientSubject(request: Request, environment: AppEnv): string {
   const forwarded = request.headers.get("x-forwarded-for");
   const real = request.headers.get("x-real-ip");
   const hasForwardingHeaders = forwarded !== null || real !== null;
+
+  // Next's own development proxy adds forwarding metadata before a route
+  // handler runs. Marking that hop in proxy.ts preserves the documented local
+  // configuration without trusting a client-supplied forwarding address.
+  if (
+    environment.NODE_ENV !== "production" &&
+    environment.AUTH_TRUSTED_PROXY !== true &&
+    request.headers.get(LOCAL_PROXY_MARKER) === "1"
+  ) {
+    return "local-client";
+  }
 
   if (environment.AUTH_TRUSTED_PROXY !== true) {
     if (hasForwardingHeaders || environment.NODE_ENV === "production") {

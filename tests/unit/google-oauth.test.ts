@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@/server/http/errors";
+import { type Database } from "@/server/db/client";
 import {
   createGoogleCodeChallenge,
   createGoogleOAuthClient,
@@ -7,6 +8,7 @@ import {
 } from "@/server/modules/auth/google";
 import { parseEnvironment } from "@/server/config/env";
 import { generateOpaqueToken } from "@/server/modules/auth/tokens";
+import { startGoogleAuthorization } from "@/server/modules/auth/oauth-flow";
 
 const environment = parseEnvironment({
   NODE_ENV: "test",
@@ -17,6 +19,26 @@ const environment = parseEnvironment({
 });
 
 describe("Google OAuth boundary", () => {
+  it("redirects browser sign-in to a safe local status when configuration is absent", async () => {
+    const unconfigured = {
+      ...environment,
+      GOOGLE_CLIENT_ID: undefined,
+      GOOGLE_CLIENT_SECRET: undefined,
+    };
+    const response = await startGoogleAuthorization(
+      new Request("http://localhost:3000/api/auth/google", {
+        headers: { accept: "text/html" },
+      }),
+      { db: {} as Database, environment: unconfigured },
+    );
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:3000/login?oauth=not-configured",
+    );
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
   it("clearly reports absent local configuration without returning provider material", () => {
     const unconfigured = {
       ...environment,

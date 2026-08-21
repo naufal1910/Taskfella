@@ -6,7 +6,7 @@ export function SettingsScreen() {
   return (
     <div className="settings-frame">
       <header className="settings-header">
-        <Link className="brand" href="/" aria-label="Taskfella home">
+        <Link className="brand" href="/">
           <BrandMark />
           <span>Taskfella</span>
         </Link>

@@ -24,7 +24,7 @@ export function TaskfellaShell() {
   return (
     <div className="site-frame">
       <header className="site-header">
-        <Link className="brand" href="/" aria-label="Taskfella home">
+        <Link className="brand" href="/">
           <BrandMark />
           <span>Taskfella</span>
         </Link>

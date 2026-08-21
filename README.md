@@ -2,7 +2,7 @@
 
 Taskfella is an open-source, personal-first, board-first workspace for focused execution. It will bring Kanban planning, Pomodoro focus, manual time tracking, and personal analytics into one calm daily workflow.
 
-This repository currently contains **Phase 0 plus Phase 1A, Phase 1B, Phase 1C, and Phase 1D: the application, authentication foundation, email/password lifecycle, Google OAuth with explicit identity linking, and account settings/appearance behavior**. Boards, tasks, timers, analytics, and exports remain later-phase behavior.
+This repository currently contains **Phase 0 plus Phase 1A–1E: the application, authentication foundation, email/password lifecycle, Google OAuth with explicit identity linking, account settings/appearance behavior, and integrated authentication verification**. Boards, tasks, timers, analytics, and exports remain later-phase behavior.
 
 ## Quick start
 
@@ -38,13 +38,14 @@ A migrated, reachable database returns HTTP `200` with `status: "ok"`. An unavai
 | `pnpm lint`                      | Run ESLint                                                       |
 | `pnpm format:check`              | Check Prettier formatting                                        |
 | `pnpm typecheck`                 | Run strict TypeScript checking                                   |
-| `pnpm test`                      | Run unit, smoke, and available integration tests                 |
+| `pnpm test`                      | Run the serialized unit, smoke, and integration suites           |
+| `pnpm test:unit`                 | Run unit and startup-smoke coverage                              |
 | `pnpm test:integration`          | Require a migrated database, then run database integration tests |
 | `pnpm build`                     | Create the production build                                      |
 | `pnpm start`                     | Serve the production build                                       |
 | `pnpm db:stop`                   | Stop local PostgreSQL                                            |
 
-The full local quality pass is `pnpm validate`. Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. See the [foundation operations guide](docs/operations.md) for authentication delivery, local message artifacts, trusted-proxy rate limits, and production SMTP configuration.
+The full local quality pass is `pnpm validate`. Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. See the [foundation operations guide](docs/operations.md) for authentication delivery, local message artifacts, trusted-proxy rate limits, and production SMTP configuration. The [Phase 1E verification record](docs/implementation/taskfella-phase1e-verification.md) lists the reproducible browser, security, leakage, and readiness checks.
 
 ## Production container
 
@@ -61,10 +62,10 @@ docker run --rm -p 3000:3000 \
   -e EMAIL_SMTP_PORT='587' \
   -e EMAIL_SMTP_SECURE='false' \
   -e EMAIL_FROM='Taskfella <no-reply@example>' \
-  -e EMAIL_SMTP_USER='smtp-user' \
-  -e EMAIL_SMTP_PASSWORD='supply-at-runtime' \
-  -e GOOGLE_CLIENT_ID='your-client-id.apps.googleusercontent.com' \
-  -e GOOGLE_CLIENT_SECRET='supply-at-runtime' \
+  -e EMAIL_SMTP_USER='replace-with-smtp-username' \
+  -e EMAIL_SMTP_PASSWORD='replace-with-smtp-password' \
+  -e GOOGLE_CLIENT_ID='replace-with-google-client-id.apps.googleusercontent.com' \
+  -e GOOGLE_CLIENT_SECRET='replace-with-google-client-secret' \
   taskfella:local
 ```
 
@@ -79,7 +80,7 @@ The contributor-facing validator command and zero-error/zero-warning requirement
 
 - [Approved product specification](docs/specification/taskfella-mvp-design.md)
 - [Approved implementation analysis and phased plan](docs/implementation/taskfella-analysis.md)
-- [Phase 0 through Phase 1D documentation index](docs/README.md)
+- [Phase 0 through Phase 1E documentation index](docs/README.md)
 - [Phase 1A authentication foundation](docs/implementation/taskfella-phase1a-auth.md)
 - [Phase 1B email/password authentication](docs/implementation/taskfella-phase1b-auth.md)
 - [Phase 1C Google OAuth and explicit identity linking](docs/implementation/taskfella-phase1c-google-oauth.md)
@@ -91,6 +92,8 @@ The contributor-facing validator command and zero-error/zero-warning requirement
 - [Phase 1C issue](https://github.com/naufal1910/Taskfella/issues/15)
 - [Phase 1D account settings issue](https://github.com/naufal1910/Taskfella/issues/16)
 - [Phase 1D account settings implementation notes](docs/implementation/taskfella-phase1d-settings.md)
+- [Phase 1E integrated verification issue](https://github.com/naufal1910/Taskfella/issues/17)
+- [Phase 1E verification record](docs/implementation/taskfella-phase1e-verification.md)
 
 ## License
 

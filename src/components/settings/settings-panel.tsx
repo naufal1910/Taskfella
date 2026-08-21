@@ -280,6 +280,20 @@ export function SettingsPanel() {
     };
   }, []);
 
+  useEffect(() => {
+    const firstInvalidField = (
+      [
+        "timezone",
+        "focusDurationMinutes",
+        "shortBreakDurationMinutes",
+        "longBreakDurationMinutes",
+        "longBreakInterval",
+      ] as const
+    ).find((field) => fieldErrors[field]);
+    if (!firstInvalidField) return;
+    document.querySelector<HTMLElement>(`[name="${firstInvalidField}"]`)?.focus();
+  }, [fieldErrors]);
+
   function setSectionPending(section: Section, pending: boolean): void {
     setPendingSections((current) => {
       const next = new Set(current);
@@ -756,6 +770,7 @@ export function SettingsPanel() {
               aria-describedby={["timezone-help", timezoneError ? "timezone-error" : undefined]
                 .filter(Boolean)
                 .join(" ")}
+              aria-errormessage={timezoneError ? "timezone-error" : undefined}
               onChange={(event) => changeValue("timezone", event.target.value)}
             />
             <small id="timezone-help">
@@ -956,6 +971,7 @@ export function SettingsPanel() {
                       ]
                         .filter(Boolean)
                         .join(" ")}
+                      aria-errormessage={fieldErrors[field.key] ? errorId : undefined}
                       onChange={(event) => changeValue(field.key, event.target.value)}
                     />
                     <span aria-hidden="true">

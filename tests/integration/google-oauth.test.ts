@@ -25,6 +25,7 @@ const environment = parseEnvironment({
 
 const createdAccountIds: string[] = [];
 const createdStateHashes: string[] = [];
+const requestAddressPrefix = Number.parseInt(crypto.randomUUID().slice(0, 2), 16);
 let requestNumber = 0;
 
 function uniqueEmail(prefix: string): string {
@@ -59,7 +60,7 @@ function callbackRequest(
   return new Request(callback, {
     headers: {
       origin: "http://localhost:3000",
-      "x-forwarded-for": `198.51.100.${(requestNumber++ % 200) + 1}`,
+      "x-forwarded-for": `198.51.${requestAddressPrefix}.${(requestNumber++ % 200) + 1}`,
       cookie: cookieHeader({
         taskfella_oauth_state: state,
         taskfella_oauth_verifier: options.wrongVerifier ? "wrong-pkce-verifier" : verifier,
@@ -77,7 +78,7 @@ function startRequest(intent: "signin" | "link", session?: string): Request {
     method: intent === "link" ? "POST" : "GET",
     headers: {
       origin: "http://localhost:3000",
-      "x-forwarded-for": `198.51.100.${(requestNumber++ % 200) + 1}`,
+      "x-forwarded-for": `198.51.${requestAddressPrefix}.${(requestNumber++ % 200) + 1}`,
       "x-csrf-token": csrf ?? "",
       cookie: cookieHeader({ taskfella_session: session, taskfella_csrf: csrf }),
     },

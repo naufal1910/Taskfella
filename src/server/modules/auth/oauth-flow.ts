@@ -95,8 +95,20 @@ export async function startGoogleAuthorization(
   options: OAuthFlowOptions,
 ): Promise<NextResponse> {
   const environment = options.environment ?? getEnvironment();
-  const config = getGoogleOAuthConfig(environment);
+  const browserRedirect = request.method === "GET" && options.responseMode !== "json";
+  let config: ReturnType<typeof getGoogleOAuthConfig>;
+  try {
+    config = getGoogleOAuthConfig(environment);
+  } catch (error) {
+    if (browserRedirect) {
+      return clearAndRedirect(environment, "/login", "not-configured");
+    }
+    throw error;
+  }
   if (!config) {
+    if (browserRedirect) {
+      return clearAndRedirect(environment, "/login", "not-configured");
+    }
     throw new AppError("OAUTH_NOT_CONFIGURED");
   }
 
