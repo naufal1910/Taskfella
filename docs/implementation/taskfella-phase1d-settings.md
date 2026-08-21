@@ -1,6 +1,6 @@
 # Phase 1D account settings and appearance
 
-Phase 1D adds the authenticated account-preferences boundary on the Phase 1A/1B session foundation. It does not add OAuth, boards, timers, or data-lifecycle behavior.
+Phase 1D adds the authenticated account-preferences boundary on the existing Phase 1A/1B/1C session foundation. It does not add OAuth, boards, timers, or data-lifecycle behavior.
 
 ## Account settings contract
 
@@ -18,7 +18,7 @@ The persisted fields are:
 - long-break duration in minutes: 1–120;
 - long-break interval: 1–12 completed focus sessions.
 
-The database checks the appearance and Pomodoro bounds. The route validates all input types, display-name controls, and timezone identifiers before any update. Updates are scoped to the account resolved from the opaque session; a loaded account identity may be sent only as a server-verified mismatch precondition and never selects the target account. Responses are `no-store`, mutation requests require the existing same-origin and double-submit CSRF checks, and invalid input uses the safe generic `INVALID_REQUEST` response.
+The database checks display-name length, appearance, and Pomodoro bounds. The route validates all input types, display-name controls, and timezone identifiers before any update. Updates are scoped to the account resolved from the opaque session; a loaded account identity may be sent only as a server-verified mismatch precondition and never selects the target account. Responses are `no-store`, mutation requests require the existing same-origin and double-submit CSRF checks, and invalid input uses the safe generic `INVALID_REQUEST` response.
 
 Each PATCH changes only the supplied fields and uses one database update, so concurrent updates to separate settings do not overwrite an unrelated field. Settings affect new focus sessions only; a future timer implementation must snapshot values when a session starts.
 
@@ -32,11 +32,11 @@ Exact event timestamps remain UTC. The account timezone is the later reporting/d
 
 The browser client accepts a revisioned appearance snapshot after login, account reads, and successful settings mutations, then updates one validated serialized `taskfella_appearance` metadata cookie through the shared lifecycle-aware arbitration boundary. Authentication responses provide an opaque server/session epoch; logout and password reset replace the metadata with a server-issued reset epoch. It is not an authorization or source-of-truth value; PostgreSQL remains authoritative. The root layout runs a small pre-paint bootstrap that resolves `system` through `prefers-color-scheme`, and a client controller follows later system-preference changes. Explicit theme selectors override the system media query without a hydration-dependent flash. The existing reduced-motion and forced-colors rules remain active.
 
-For authenticated requests, the root layout resolves the persisted account preference before paint, even when the cache is absent or invalid. Unauthenticated requests use the system preference; authenticated client reads and mutations refresh the revision-scoped cache after the response is accepted.
+For authenticated requests, the root layout resolves the persisted account preference before paint, even when the cache is absent or invalid. Unauthenticated requests use the system preference; authenticated client reads and mutations refresh the revision-scoped cache after the response is accepted. Immediate live cross-window theme synchronization is intentionally out of scope; another tab observes a saved preference on navigation or reload.
 
 ## Verification
 
-After pulling the migration, run:
+After pulling the Phase 1D migrations, run:
 
 ```bash
 pnpm db:migrate

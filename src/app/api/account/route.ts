@@ -203,11 +203,7 @@ async function update(request: Request): Promise<NextResponse> {
           throw new Error("Account settings could not be saved.");
         }
 
-        return accountResponse(
-          updated,
-          String(updated.appearanceRevision),
-          appearanceEpoch,
-        );
+        return accountResponse(updated, String(updated.appearanceRevision), appearanceEpoch);
       },
       { mutation: true },
     );
