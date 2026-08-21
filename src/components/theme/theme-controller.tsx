@@ -59,6 +59,15 @@ export function ThemeController({
         const identity = typeof detail.identity === "string" ? detail.identity : undefined;
         const reset = detail.reset === true;
         const authenticated = detail.authenticated === true;
+        if (reset) {
+          authenticationReset = true;
+          authoritativePreference = detail.preference;
+          authoritativeRevision = revision;
+          authoritativeGeneration = generation;
+          authoritativeIdentity = undefined;
+          applyCurrent();
+          return;
+        }
         const sharedGeneration = readAppearanceGeneration();
         const sharedRevision = readAppearanceRevision();
         const sharedIdentity = readAppearanceIdentity();
@@ -112,15 +121,12 @@ export function ThemeController({
         ) {
           return;
         }
-        if (reset) {
-          authenticationReset = true;
-        } else if (authenticated) {
+        if (authenticated) {
           authenticationReset = false;
         } else if (authenticationReset) {
           return;
         }
         if (
-          !reset &&
           revision &&
           authoritativeRevision &&
           identity === authoritativeIdentity &&
@@ -131,7 +137,7 @@ export function ThemeController({
         authoritativePreference = detail.preference;
         authoritativeRevision = revision;
         authoritativeGeneration = generation ?? authoritativeGeneration;
-        authoritativeIdentity = reset ? undefined : (identity ?? authoritativeIdentity);
+        authoritativeIdentity = identity ?? authoritativeIdentity;
       } else if (!serverOwnsPreference) {
         authoritativePreference = readAppearanceCookie();
         authoritativeRevision = readAppearanceRevision();
