@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { authRoute, databaseFor, noStoreResponse, requireAuthCsrf } from "@/server/http/auth-route";
 import { clearSessionCookie, getSessionToken } from "@/server/modules/auth/cookies";
@@ -15,7 +16,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       await revokeSession(databaseFor(context), token, "logout");
     }
 
-    const response = noStoreResponse({ ok: true, status: "logged-out" }, 200, context);
+    const response = noStoreResponse(
+      { ok: true, status: "logged-out", appearanceEpoch: randomUUID() },
+      200,
+      context,
+    );
     clearSessionCookie(response, context.environment);
     return response;
   });

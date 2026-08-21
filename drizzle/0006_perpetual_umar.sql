@@ -1,0 +1,1 @@
+ALTER TABLE "accounts" ADD COLUMN "appearance_revision" integer DEFAULT 0 NOT NULL;

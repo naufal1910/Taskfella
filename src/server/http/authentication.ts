@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { type AppEnv, getEnvironment } from "@/server/config/env";
 import { getDatabase, type Database } from "@/server/db/client";
@@ -6,13 +7,15 @@ import { logger } from "@/server/observability/logger";
 import { getSessionToken } from "@/server/modules/auth/cookies";
 import { validateCsrfRequest } from "@/server/modules/auth/csrf";
 import { lookupSession, type AuthenticatedSession } from "@/server/modules/auth/sessions";
-import { getAccountById } from "@/server/modules/auth/accounts";
+import { getAccountWithVersion } from "@/server/modules/auth/accounts";
 import { appErrorResponse, AppError } from "./errors";
 import { applyRequestContext, getRequestContext } from "./request-id";
 
 export interface AuthenticatedAccount {
   account: Account;
   session: AuthenticatedSession;
+  accountVersion: string;
+  appearanceEpoch: string;
 }
 
 export interface AuthenticationDependencies {
@@ -34,12 +37,17 @@ export async function resolveAuthenticatedAccount(
     return null;
   }
 
-  const account = await getAccountById(db, session.accountId);
-  if (!account) {
+  const accountWithVersion = await getAccountWithVersion(db, session.accountId);
+  if (!accountWithVersion) {
     return null;
   }
 
-  return { account, session };
+  return {
+    account: accountWithVersion.account,
+    session,
+    accountVersion: accountWithVersion.version,
+    appearanceEpoch: session.id,
+  };
 }
 
 export async function requireAuthenticatedAccount(
@@ -95,6 +103,9 @@ export async function protectedRoute(
     });
 
     const response = appErrorResponse(appError, context.requestId);
+    if (appError.code === "UNAUTHORIZED") {
+      response.headers.set("x-taskfella-appearance-epoch", randomUUID());
+    }
     applyRequestContext(response.headers, context);
     return response;
   }

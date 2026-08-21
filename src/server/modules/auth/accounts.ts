@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { type Database } from "@/server/db/client";
 import { accounts, passwordCredentials, type Account } from "@/server/db/schema";
+import { settingsFromAccountInput, type AccountSettings } from "@/server/modules/account/settings";
 import { hashPassword, verifyPasswordWithFallback } from "./password";
 
 type AccountTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -44,10 +45,11 @@ export async function lockEmailOwnership(
 
 export async function createAccount(
   db: Database,
-  input: { email: string; now?: Date },
+  input: { email: string; now?: Date } & Partial<AccountSettings>,
 ): Promise<Account> {
   const normalizedEmail = validateEmail(input.email);
   const now = input.now ?? new Date();
+  const settings = settingsFromAccountInput(input);
 
   return db.transaction(async (tx) => {
     await lockEmailOwnership(tx, normalizedEmail);
@@ -56,6 +58,15 @@ export async function createAccount(
       .values({
         email: input.email.trim(),
         normalizedEmail,
+        displayName: settings.displayName,
+        timezone: settings.timezone,
+        appearance: settings.appearance,
+        notificationsEnabled: settings.notificationsEnabled,
+        soundEnabled: settings.soundEnabled,
+        focusDurationMinutes: settings.focusDurationMinutes,
+        shortBreakDurationMinutes: settings.shortBreakDurationMinutes,
+        longBreakDurationMinutes: settings.longBreakDurationMinutes,
+        longBreakInterval: settings.longBreakInterval,
         createdAt: now,
         updatedAt: now,
       })
@@ -72,6 +83,14 @@ export async function createAccount(
 export async function getAccountById(db: Database, accountId: string): Promise<Account | null> {
   const [account] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
   return account ?? null;
+}
+
+export async function getAccountWithVersion(
+  db: Database,
+  accountId: string,
+): Promise<{ account: Account; version: string } | null> {
+  const [account] = await db.select().from(accounts).where(eq(accounts.id, accountId)).limit(1);
+  return account ? { account, version: String(account.appearanceRevision) } : null;
 }
 
 export async function getAccountByNormalizedEmail(

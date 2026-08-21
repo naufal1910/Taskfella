@@ -1,12 +1,15 @@
 import { randomBytes } from "node:crypto";
 import type { NextResponse } from "next/server";
 import { type AppEnv, getEnvironment } from "@/server/config/env";
+import { APPEARANCE_VALUES, type Appearance } from "@/server/modules/account/settings";
 
 export const SESSION_COOKIE_NAME = "taskfella_session";
 export const CSRF_COOKIE_NAME = "taskfella_csrf";
+export const APPEARANCE_COOKIE_NAME = "taskfella_appearance";
 export const CSRF_HEADER_NAME = "x-csrf-token";
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 export const CSRF_COOKIE_MAX_AGE_SECONDS = 24 * 60 * 60;
+export const APPEARANCE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60;
 export const OAUTH_STATE_COOKIE_NAME = "taskfella_oauth_state";
 export const OAUTH_VERIFIER_COOKIE_NAME = "taskfella_oauth_verifier";
 export const OAUTH_COOKIE_MAX_AGE_SECONDS = 10 * 60;
@@ -46,6 +49,59 @@ export function getSessionToken(request: Request): string | undefined {
 
 export function getCsrfCookie(request: Request): string | undefined {
   return readCookie(request, CSRF_COOKIE_NAME);
+}
+
+export function getAppearanceCookie(request: Request): Appearance | undefined {
+  const value = readAppearanceMetadataCookie(request)?.preference;
+  return value && APPEARANCE_VALUES.includes(value as Appearance)
+    ? (value as Appearance)
+    : undefined;
+}
+
+export function getAppearanceRevisionCookie(request: Request): string | undefined {
+  return readAppearanceMetadataCookie(request)?.revision;
+}
+
+function readAppearanceMetadataCookie(request: Request):
+  | {
+      preference?: string;
+      revision?: string;
+      identity?: string;
+      epoch?: string;
+    }
+  | undefined {
+  const value = readCookie(request, APPEARANCE_COOKIE_NAME);
+  if (!value) return undefined;
+  try {
+    const metadata = JSON.parse(value) as {
+      preference?: unknown;
+      revision?: unknown;
+      identity?: unknown;
+      epoch?: unknown;
+    };
+    if (
+      typeof metadata.preference !== "string" ||
+      !APPEARANCE_VALUES.includes(metadata.preference as Appearance) ||
+      (metadata.revision !== undefined &&
+        (typeof metadata.revision !== "string" ||
+          (metadata.revision !== "reset" && !/^\d+$/.test(metadata.revision)))) ||
+      (metadata.identity !== undefined &&
+        (typeof metadata.identity !== "string" ||
+          !/^[A-Za-z0-9._:-]{1,128}$/.test(metadata.identity))) ||
+      (metadata.epoch !== undefined &&
+        (typeof metadata.epoch !== "string" || !/^[A-Za-z0-9._:-]{1,128}$/.test(metadata.epoch)))
+    ) {
+      return undefined;
+    }
+    return metadata as {
+      preference: string;
+      revision?: string;
+      identity?: string;
+      epoch?: string;
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export function getOAuthStateCookie(request: Request): string | undefined {
@@ -111,6 +167,40 @@ export function clearSessionCookie(
     maxAge: 0,
     httpOnly: true,
     secure: isProduction(environment),
+  });
+}
+
+/** A non-sensitive cache of the account preference used for pre-paint theme selection. */
+function appearanceCookieIsSecure(environment?: AppEnv): boolean {
+  return environment ? isProduction(environment) : process.env.NODE_ENV === "production";
+}
+
+export function setAppearanceCookie(
+  response: NextResponse,
+  appearance: Appearance,
+  environment?: AppEnv,
+  revision?: string,
+  identity?: string,
+  epoch?: string,
+): void {
+  const metadata = JSON.stringify({
+    preference: appearance,
+    ...(revision ? { revision } : {}),
+    ...(identity ? { identity } : {}),
+    ...(epoch ? { epoch } : {}),
+  });
+  setCookie(response, APPEARANCE_COOKIE_NAME, encodeURIComponent(metadata), {
+    maxAge: APPEARANCE_COOKIE_MAX_AGE_SECONDS,
+    httpOnly: false,
+    secure: appearanceCookieIsSecure(environment),
+  });
+}
+
+export function clearAppearanceCookie(response: NextResponse, environment?: AppEnv): void {
+  setCookie(response, APPEARANCE_COOKIE_NAME, "", {
+    maxAge: 0,
+    httpOnly: false,
+    secure: appearanceCookieIsSecure(environment),
   });
 }
 

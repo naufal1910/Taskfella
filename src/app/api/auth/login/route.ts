@@ -8,6 +8,7 @@ import {
   requireAuthCsrf,
 } from "@/server/http/auth-route";
 import { parseEmailPassword } from "@/server/modules/auth/input";
+import { getAccountWithVersion } from "@/server/modules/auth/accounts";
 import { getSessionToken, setSessionCookie } from "@/server/modules/auth/cookies";
 import { authenticateAndIssueSession } from "@/server/modules/auth/lifecycle";
 import { AppError } from "@/server/http/errors";
@@ -33,6 +34,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (result.state === "unverified") {
       throw new AppError("EMAIL_NOT_VERIFIED");
     }
+    const accountSnapshot = await getAccountWithVersion(db, result.account.id);
+    if (!accountSnapshot) {
+      throw new AppError("INTERNAL_ERROR");
+    }
+    const appearanceAccount = accountSnapshot.account;
+    const appearanceRevision = accountSnapshot.version;
 
     const response = noStoreResponse(
       {
@@ -41,6 +48,9 @@ export async function POST(request: Request): Promise<NextResponse> {
           id: result.account.id,
           email: result.account.email,
           emailVerifiedAt: result.account.emailVerifiedAt,
+          appearance: appearanceAccount.appearance,
+          appearanceRevision,
+          appearanceEpoch: result.sessionId,
         },
       },
       200,

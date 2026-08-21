@@ -12,6 +12,16 @@ import {
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/primitives";
 import {
+  APPEARANCE_RESET_REVISION,
+  cacheAppearancePreference,
+  clearAppearancePreferenceCache,
+  currentAppearanceAuthEpoch,
+  detectBrowserTimezone,
+  notifyAppearanceChange,
+  setAppearanceAuthEpoch,
+  type AppearancePreference,
+} from "@/components/theme/theme";
+import {
   type AuthFieldErrors,
   type AuthFormMode,
   MIN_PASSWORD_LENGTH,
@@ -400,6 +410,8 @@ export function AuthForm({ mode, token }: AuthFormProps) {
         setFieldErrors(nextFieldErrors);
         return;
       }
+      const requestGeneration = currentAppearanceAuthEpoch();
+      let lifecycleGeneration: string | undefined;
 
       const endpoint =
         mode === "signup"
@@ -414,14 +426,17 @@ export function AuthForm({ mode, token }: AuthFormProps) {
                   ? "/api/auth/resend-verification"
                   : "/api/auth/verify-email";
 
+      const browserTimezone = mode === "signup" ? detectBrowserTimezone() : undefined;
       const body =
         mode === "verify"
           ? { token }
           : mode === "reset"
             ? { token, password }
-            : mode === "signup" || mode === "login"
-              ? { email, password }
-              : { email };
+            : mode === "signup"
+              ? { email, password, ...(browserTimezone ? { timezone: browserTimezone } : {}) }
+              : mode === "login"
+                ? { email, password }
+                : { email };
 
       try {
         const csrf = await getCsrfToken();
@@ -439,6 +454,13 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           error?: ApiError;
           message?: string;
           status?: "pending" | "success";
+          appearanceEpoch?: string;
+          account?: {
+            id?: string;
+            appearance?: AppearancePreference;
+            appearanceRevision?: string;
+            appearanceEpoch?: string;
+          };
         };
 
         if (!response.ok) {
@@ -479,6 +501,33 @@ export function AuthForm({ mode, token }: AuthFormProps) {
           if (window.history.replaceState) {
             window.history.replaceState({}, "", "/reset-password");
           }
+        }
+        if (mode === "login" || mode === "reset") {
+          lifecycleGeneration =
+            mode === "login" ? payload.account?.appearanceEpoch : payload.appearanceEpoch;
+          if (mode === "reset") {
+            clearAppearancePreferenceCache();
+            if (lifecycleGeneration) setAppearanceAuthEpoch(lifecycleGeneration, true);
+          } else if (payload.account?.appearance) {
+            cacheAppearancePreference(
+              payload.account.appearance,
+              payload.account.appearanceRevision,
+              payload.account.id,
+              lifecycleGeneration,
+              requestGeneration,
+            );
+          }
+          notifyAppearanceChange(
+            mode === "login" ? (payload.account?.appearance ?? "system") : "system",
+            mode === "login" ? payload.account?.appearanceRevision : APPEARANCE_RESET_REVISION,
+            mode === "login"
+              ? {
+                  authenticated: true,
+                  generation: lifecycleGeneration,
+                  identity: payload.account?.id,
+                }
+              : { generation: lifecycleGeneration, reset: true },
+          );
         }
         if (mode === "login") {
           router.push("/account");

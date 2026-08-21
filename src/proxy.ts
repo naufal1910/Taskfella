@@ -12,7 +12,11 @@ export function proxy(request: NextRequest): NextResponse {
   if (
     pathname.startsWith("/api/auth") ||
     pathname === "/api/account" ||
+    pathname.startsWith("/api/account/") ||
     pathname === "/account" ||
+    pathname === "/account/" ||
+    pathname === "/settings" ||
+    pathname === "/settings/" ||
     pathname === "/login" ||
     pathname === "/signup" ||
     pathname === "/logout" ||

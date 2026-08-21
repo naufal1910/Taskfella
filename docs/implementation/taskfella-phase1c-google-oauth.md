@@ -40,7 +40,7 @@ Callback state is consumed under a PostgreSQL row lock before provider work. Mis
 - Privacy exception: after Google verifies control of an email, that Google-account holder may infer that a matching Taskfella account exists when this sign-in does not create a new account. This narrow inference is required to refuse silent linking and direct the user to the explicit-link step; failure wording and status remain generic, and no account identifier or other account data is disclosed.
 - Explicit linking is bound to the account and session that started it. It may link a new verified Google identity once; a provider subject linked to another account is rejected, and a second Google identity on one account is reported as already linked without replacement.
 - Email conflicts and identity conflicts leave the current account and session unchanged. Already-linked linking rotates the current session safely.
-- The account API exposes only provider labels and link timestamps. Provider subjects, email responses beyond the app-owned account email, authorization codes, access tokens, refresh tokens, and raw session values are not exposed.
+- OAuth identity data exposed by the account API is limited to provider labels and link timestamps. Provider subjects, email responses beyond the app-owned account email, authorization codes, access tokens, refresh tokens, and raw session values are not exposed.
 
 Callback redirects use `cache-control: no-store` and `referrer-policy: no-referrer`; shared auth-route responses are also marked `no-store`. Session cookies remain HttpOnly, SameSite=Lax, and Secure in production. The existing CSRF and protected-route boundaries remain authoritative for app mutations.
 

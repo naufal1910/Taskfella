@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   authRoute,
@@ -28,6 +29,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         {
           ok: true,
           status: "success",
+          appearanceEpoch: randomUUID(),
           message: "Your password was reset. Sign in with the new password.",
         },
         200,
