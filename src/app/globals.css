@@ -307,6 +307,16 @@ select:focus-visible {
   text-transform: uppercase;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .eyebrow {
+    color: var(--color-link);
+  }
+}
+
+:root[data-theme="dark"] .eyebrow {
+  color: var(--color-link);
+}
+
 h1,
 h2,
 h3,
