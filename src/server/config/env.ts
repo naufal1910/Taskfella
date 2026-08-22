@@ -198,6 +198,21 @@ export type AppEnv = Omit<
 };
 export type EnvironmentInput = Record<string, string | undefined>;
 
+export function getConfiguredAppUrl(input: EnvironmentInput = process.env): URL | undefined {
+  const value = input.APP_URL;
+  if (!value) return undefined;
+
+  try {
+    const url = new URL(value);
+    if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password) {
+      return undefined;
+    }
+    return url;
+  } catch {
+    return undefined;
+  }
+}
+
 function selectEnvironment(input: EnvironmentInput): Record<string, string | undefined> {
   return {
     NODE_ENV: input.NODE_ENV,

@@ -1,18 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getEnvironment } from "@/server/config/env";
-import { LOCAL_PROXY_MARKER } from "@/server/http/auth-route";
+import { getConfiguredAppUrl } from "@/server/config/env";
+import { LOCAL_PROXY_MARKER } from "@/server/http/proxy-marker";
 import { applyRequestContext, getRequestContext } from "@/server/http/request-id";
 
 export function proxy(request: NextRequest): NextResponse {
   const context = getRequestContext(request);
   const requestHeaders = new Headers(request.headers);
-  const environment = getEnvironment();
   const pathname = request.nextUrl.pathname;
   if (pathname === "/verify-email" || pathname === "/reset-password") {
     const token = request.nextUrl.searchParams.get("token");
-    if (token !== null) {
-      const destination = new URL(request.url);
-      destination.searchParams.delete("token");
+    const appUrl = getConfiguredAppUrl();
+    if (token !== null && appUrl) {
+      const destination = new URL(pathname, appUrl);
+      for (const [key, value] of request.nextUrl.searchParams) {
+        if (key !== "token") destination.searchParams.append(key, value);
+      }
       destination.hash =
         token.length > 0 && token.length <= 512 ? new URLSearchParams({ token }).toString() : "";
       const redirect = new NextResponse(null, {
@@ -25,7 +27,7 @@ export function proxy(request: NextRequest): NextResponse {
       return redirect;
     }
   }
-  if (environment.NODE_ENV !== "production" && environment.AUTH_TRUSTED_PROXY !== true) {
+  if (process.env.NODE_ENV !== "production" && process.env.AUTH_TRUSTED_PROXY !== "true") {
     requestHeaders.set(LOCAL_PROXY_MARKER, "1");
   }
   applyRequestContext(requestHeaders, context);

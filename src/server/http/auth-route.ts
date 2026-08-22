@@ -5,10 +5,11 @@ import { type Database, getDatabase } from "@/server/db/client";
 import { AppError, appErrorResponse, toAppError } from "@/server/http/errors";
 import { applyRequestContext, getRequestContext } from "@/server/http/request-id";
 import { logger } from "@/server/observability/logger";
+import { LOCAL_PROXY_MARKER } from "./proxy-marker";
 import { validateCsrfRequest } from "@/server/modules/auth/csrf";
 import { AUTH_RATE_LIMITS, consumeRateLimit } from "@/server/modules/auth/rate-limit";
 
-export const LOCAL_PROXY_MARKER = "x-taskfella-local-proxy";
+export { LOCAL_PROXY_MARKER } from "./proxy-marker";
 
 export interface AuthRouteOptions {
   db?: Database;
