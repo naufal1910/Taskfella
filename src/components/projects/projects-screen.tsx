@@ -151,43 +151,45 @@ function ProjectCard({
         </p>
       )}
       {deleteOpen && (
-        <FocusDialog
-          className="destructive-confirm"
-          labelledBy={`delete-${project.id}-title`}
-          onClose={() => setDeleteOpen(false)}
-        >
-          <h4 id={`delete-${project.id}-title`}>Delete “{project.name}” permanently?</h4>
-          <p>
-            This removes the project and its retained history. This cannot be undone. Type the
-            project name to continue.
-          </p>
-          <label className="field" htmlFor={`confirm-${project.id}`}>
-            Project name
-            <input
-              id={`confirm-${project.id}`}
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
-              autoComplete="off"
-            />
-          </label>
-          <div className="destructive-confirm__actions">
-            <button
-              className="ui-button ui-button--secondary"
-              type="button"
-              onClick={() => setDeleteOpen(false)}
-            >
-              Cancel
-            </button>
-            <button
-              className="ui-button ui-button--destructive"
-              type="button"
-              disabled={confirmation !== project.name || pending}
-              onClick={() => void permanentlyDelete()}
-            >
-              Permanently delete
-            </button>
-          </div>
-        </FocusDialog>
+        <div className="modal-backdrop" role="presentation">
+          <FocusDialog
+            className="destructive-confirm"
+            labelledBy={`delete-${project.id}-title`}
+            onClose={() => setDeleteOpen(false)}
+          >
+            <h4 id={`delete-${project.id}-title`}>Delete “{project.name}” permanently?</h4>
+            <p>
+              This removes the project and its retained history. This cannot be undone. Type the
+              project name to continue.
+            </p>
+            <label className="field" htmlFor={`confirm-${project.id}`}>
+              Project name
+              <input
+                id={`confirm-${project.id}`}
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <div className="destructive-confirm__actions">
+              <button
+                className="ui-button ui-button--secondary"
+                type="button"
+                onClick={() => setDeleteOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="ui-button ui-button--destructive"
+                type="button"
+                disabled={confirmation !== project.name || pending}
+                onClick={() => void permanentlyDelete()}
+              >
+                Permanently delete
+              </button>
+            </div>
+          </FocusDialog>
+        </div>
       )}
     </article>
   );

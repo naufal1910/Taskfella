@@ -5,6 +5,11 @@ import { type ReactNode, useEffect, useRef } from "react";
 const focusableSelector =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+function currentActiveElement(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return document.activeElement instanceof HTMLElement ? document.activeElement : null;
+}
+
 export function FocusDialog({
   children,
   className,
@@ -17,12 +22,13 @@ export function FocusDialog({
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
+  const previousRef = useRef<HTMLElement | null>(currentActiveElement());
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previous = previousRef.current;
     if (!dialog) return;
 
     const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));

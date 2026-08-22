@@ -585,43 +585,45 @@ function BoardLifecycle({
         </p>
       )}
       {deleteOpen && (
-        <FocusDialog
-          className="destructive-confirm"
-          labelledBy="board-delete-title"
-          onClose={() => setDeleteOpen(false)}
-        >
-          <h2 id="board-delete-title">Permanently delete this project?</h2>
-          <p>
-            Archived history and board configuration will be removed. Type{" "}
-            <strong>{project.name}</strong> exactly to confirm.
-          </p>
-          <label className="field" htmlFor="board-delete-confirm">
-            Project name
-            <input
-              id="board-delete-confirm"
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
-              autoComplete="off"
-            />
-          </label>
-          <div className="dialog-actions">
-            <button
-              className="ui-button ui-button--secondary"
-              type="button"
-              onClick={() => setDeleteOpen(false)}
-            >
-              Cancel
-            </button>
-            <button
-              className="ui-button ui-button--destructive"
-              type="button"
-              disabled={confirmation !== project.name || pending}
-              onClick={() => void destroy()}
-            >
-              Permanently delete
-            </button>
-          </div>
-        </FocusDialog>
+        <div className="modal-backdrop" role="presentation">
+          <FocusDialog
+            className="destructive-confirm"
+            labelledBy="board-delete-title"
+            onClose={() => setDeleteOpen(false)}
+          >
+            <h2 id="board-delete-title">Permanently delete this project?</h2>
+            <p>
+              Archived history and board configuration will be removed. Type{" "}
+              <strong>{project.name}</strong> exactly to confirm.
+            </p>
+            <label className="field" htmlFor="board-delete-confirm">
+              Project name
+              <input
+                id="board-delete-confirm"
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <div className="dialog-actions">
+              <button
+                className="ui-button ui-button--secondary"
+                type="button"
+                onClick={() => setDeleteOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="ui-button ui-button--destructive"
+                type="button"
+                disabled={confirmation !== project.name || pending}
+                onClick={() => void destroy()}
+              >
+                Permanently delete
+              </button>
+            </div>
+          </FocusDialog>
+        </div>
       )}
     </div>
   );

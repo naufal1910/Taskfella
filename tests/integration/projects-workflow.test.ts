@@ -17,6 +17,7 @@ import {
   reorderProjects,
   restoreProject,
   updateColumn,
+  updateLabel,
   updateSwimlane,
 } from "@/server/modules/projects/service";
 import { assertColumnWip } from "@/server/modules/workflow/wip";
@@ -291,28 +292,73 @@ integration("Phase 2 projects and workflow transactions", () => {
     );
     const waiting = added.columns.find((column) => column.name === "Waiting");
     if (!waiting) throw new Error("new column missing");
+    const movedByPatch = await updateColumn(
+      db,
+      account.id,
+      created.project.id,
+      waiting.id,
+      { position: 0 },
+      { expectedRevision: added.project.revision },
+    );
+    expect(movedByPatch.columns[0]?.id).toBe(waiting.id);
+
     const reordered = await reorderColumns(
       db,
       account.id,
       created.project.id,
       [
         waiting.id,
-        ...added.columns.filter((column) => column.id !== waiting.id).map((column) => column.id),
+        ...movedByPatch.columns
+          .filter((column) => column.id !== waiting.id)
+          .map((column) => column.id),
       ],
-      { expectedRevision: added.project.revision },
+      { expectedRevision: movedByPatch.project.revision },
     );
     expect(reordered.columns[0]?.id).toBe(waiting.id);
 
     const lane = await createSwimlane(db, account.id, created.project.id, "Personal");
-    expect(lane.swimlanes).toHaveLength(1);
+    const secondLane = await createSwimlane(
+      db,
+      account.id,
+      created.project.id,
+      "Later",
+      { expectedRevision: lane.project.revision },
+    );
+    const movedLane = await updateSwimlane(
+      db,
+      account.id,
+      created.project.id,
+      lane.swimlanes[0]!.id,
+      { position: 1 },
+      { expectedRevision: secondLane.project.revision },
+    );
+    expect(movedLane.swimlanes.map((item) => item.name)).toEqual(["Later", "Personal"]);
+    expect(movedLane.swimlanes.map((item) => item.position)).toEqual([0, 1]);
+
     const withLabel = await createLabel(
       db,
       account.id,
       created.project.id,
       { name: "Focus", color: "#176B51" },
-      { expectedRevision: lane.project.revision },
+      { expectedRevision: movedLane.project.revision },
     );
-    expect(withLabel.labels[0]).toMatchObject({ name: "Focus", color: "#176B51" });
+    const secondLabel = await createLabel(
+      db,
+      account.id,
+      created.project.id,
+      { name: "Later focus", color: "#246BCE" },
+      { expectedRevision: withLabel.project.revision },
+    );
+    const movedLabel = await updateLabel(
+      db,
+      account.id,
+      created.project.id,
+      withLabel.labels[0]!.id,
+      { position: 1 },
+      { expectedRevision: secondLabel.project.revision },
+    );
+    expect(movedLabel.labels.map((item) => item.name)).toEqual(["Later focus", "Focus"]);
+    expect(movedLabel.labels.map((item) => item.position)).toEqual([0, 1]);
     await expect(
       updateSwimlane(
         db,
@@ -325,7 +371,7 @@ integration("Phase 2 projects and workflow transactions", () => {
     ).rejects.toMatchObject({ code: "CONCURRENT_UPDATE" });
 
     const deleted = await deleteColumn(db, account.id, created.project.id, waiting.id, {
-      expectedRevision: withLabel.project.revision,
+      expectedRevision: movedLabel.project.revision,
     });
     expect(deleted.columns.some((column) => column.id === waiting.id)).toBe(false);
   });

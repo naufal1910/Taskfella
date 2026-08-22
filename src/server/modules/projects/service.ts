@@ -94,6 +94,15 @@ function assertRevision(expectedRevision: number | undefined, currentRevision: n
   }
 }
 
+function moveToPosition<T>(items: T[], currentIndex: number, rawPosition: unknown): T[] {
+  const targetIndex = Math.min(normalizePosition(rawPosition, currentIndex), items.length - 1);
+  if (targetIndex === currentIndex) return items;
+  const next = [...items];
+  const [moved] = next.splice(currentIndex, 1);
+  if (moved !== undefined) next.splice(targetIndex, 0, moved);
+  return next;
+}
+
 async function lockAccountOrder(db: ProjectDatabase, accountId: string): Promise<void> {
   await db.execute(
     sql`SELECT pg_advisory_xact_lock(hashtext(${`taskfella-project-order:${accountId}`}))`,
@@ -368,10 +377,8 @@ export async function reorderProjects(
       .for("update");
     const currentIndex = ordered.findIndex((project) => project.id === normalizedProjectId);
     if (currentIndex < 0) throw new AppError("NOT_FOUND");
-    const targetIndex = Math.min(position, ordered.length - 1);
-    const [moved] = ordered.splice(currentIndex, 1);
-    ordered.splice(targetIndex, 0, moved);
-    for (const [index, project] of ordered.entries()) {
+    const reordered = moveToPosition(ordered, currentIndex, position);
+    for (const [index, project] of reordered.entries()) {
       if (project.position !== index) {
         await tx
           .update(projects)
@@ -379,7 +386,7 @@ export async function reorderProjects(
           .where(eq(projects.id, project.id));
       }
     }
-    return ordered.map((project, index) => ({ ...project, position: index }));
+    return reordered.map((project, index) => ({ ...project, position: index }));
   });
 }
 
@@ -650,8 +657,10 @@ export async function updateColumn(
     const normalizedColumnId = normalizeUuid(columnId);
     const targetColumn = current.find((column) => column.id === normalizedColumnId);
     if (!targetColumn) throw new AppError("NOT_FOUND");
+    const currentIndex = current.findIndex((column) => column.id === normalizedColumnId);
+    const ordered = moveToPosition(current, currentIndex, patch.position);
     const requestedRole = patch.role === undefined ? undefined : normalizeRole(patch.role);
-    const target = current.map((column, index) => {
+    const target = ordered.map((column, index) => {
       const next =
         column.id === normalizedColumnId
           ? draftFromColumn(column, patch, index)
@@ -800,13 +809,20 @@ export async function updateSwimlane(
       .for("update");
     const row = current.find((lane) => lane.id === normalizedSwimlaneId);
     if (!row) throw new AppError("NOT_FOUND");
+    const currentIndex = current.findIndex((lane) => lane.id === normalizedSwimlaneId);
+    const ordered = moveToPosition(current, currentIndex, patch.position);
     const name = patch.name === undefined ? row.name : normalizeSwimlaneName(patch.name);
-    const position = normalizePosition(patch.position, row.position);
     assertUniqueNames(current.map((lane) => (lane.id === row.id ? name : lane.name)));
-    await tx
-      .update(swimlanes)
-      .set({ name, position, updatedAt: now })
-      .where(and(eq(swimlanes.id, normalizedSwimlaneId), eq(swimlanes.projectId, projectId)));
+    for (const [position, lane] of ordered.entries()) {
+      await tx
+        .update(swimlanes)
+        .set({
+          name: lane.id === normalizedSwimlaneId ? name : lane.name,
+          position,
+          updatedAt: now,
+        })
+        .where(and(eq(swimlanes.id, lane.id), eq(swimlanes.projectId, projectId)));
+    }
     await tx
       .update(projects)
       .set({ revision: sql`${projects.revision} + 1`, updatedAt: now })
@@ -941,20 +957,33 @@ export async function updateLabel(
     const project = await lockProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const normalizedLabelId = normalizeUuid(labelId);
-    const [label] = await tx
+    const current = await tx
       .select()
       .from(labels)
-      .where(and(eq(labels.id, normalizedLabelId), eq(labels.projectId, projectId)))
+      .where(eq(labels.projectId, projectId))
+      .orderBy(asc(labels.position), asc(labels.createdAt))
       .for("update");
+    const label = current.find((row) => row.id === normalizedLabelId);
     if (!label) throw new AppError("NOT_FOUND");
+    const currentIndex = current.findIndex((row) => row.id === normalizedLabelId);
+    const ordered = moveToPosition(current, currentIndex, patch.position);
     const name = patch.name === undefined ? label.name : normalizeLabelName(patch.name);
     const color = patch.color === undefined ? label.color : normalizeColor(patch.color);
-    const position = normalizePosition(patch.position, label.position);
     try {
-      await tx
-        .update(labels)
-        .set({ name, normalizedName: normalizedLabelName(name), color, position, updatedAt: now })
-        .where(and(eq(labels.id, normalizedLabelId), eq(labels.projectId, projectId)));
+      for (const [position, row] of ordered.entries()) {
+        const isTarget = row.id === normalizedLabelId;
+        const nextName = isTarget ? name : row.name;
+        await tx
+          .update(labels)
+          .set({
+            name: nextName,
+            normalizedName: normalizedLabelName(nextName),
+            color: isTarget ? color : row.color,
+            position,
+            updatedAt: now,
+          })
+          .where(and(eq(labels.id, row.id), eq(labels.projectId, projectId)));
+      }
     } catch (error) {
       if (isUniqueConstraintViolation(error)) throw new AppError("CONFLICT");
       throw error;

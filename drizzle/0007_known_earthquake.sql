@@ -97,12 +97,21 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   project_key uuid;
+  project_keys uuid[];
   active_count integer;
   completed_count integer;
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    project_keys := ARRAY[NEW.project_id];
+  ELSIF TG_OP = 'DELETE' THEN
+    project_keys := ARRAY[OLD.project_id];
+  ELSE
+    project_keys := ARRAY[OLD.project_id, NEW.project_id];
+  END IF;
+
   FOR project_key IN
     SELECT DISTINCT changed.project_id
-    FROM unnest(ARRAY[NEW.project_id, OLD.project_id]) AS changed(project_id)
+    FROM unnest(project_keys) AS changed(project_id)
     WHERE changed.project_id IS NOT NULL
     ORDER BY changed.project_id
   LOOP

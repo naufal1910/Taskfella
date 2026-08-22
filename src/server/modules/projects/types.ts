@@ -224,7 +224,12 @@ export function normalizeUuid(value: unknown): string {
 
 export function normalizePosition(value: unknown, fallback: number): number {
   if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > 2_147_483_647
+  ) {
     throw new AppError("INVALID_REQUEST");
   }
   return value;
@@ -242,7 +247,11 @@ export function normalizeWipLimit(value: unknown, mode: WipMode): number | null 
 }
 
 export function normalizedLabelName(name: string): string {
-  return name.trim().normalize("NFKC").toLocaleLowerCase("en-US");
+  const normalized = name.trim().normalize("NFKC").toLocaleLowerCase("en-US");
+  if ([...normalized].length < 1 || [...normalized].length > 60) {
+    throw new AppError("INVALID_REQUEST");
+  }
+  return normalized;
 }
 
 export function validateColumnDrafts(drafts: ColumnDraft[]): ColumnDraft[] {
