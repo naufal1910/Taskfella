@@ -33,9 +33,11 @@ export function FocusDialog({
     const dialog = dialogRef.current;
     const previous = previousRef.current;
     if (!dialog) return;
+    const dialogElement = dialog;
 
-    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
-    const initial = focusable()[0] ?? dialog;
+    const focusable = () =>
+      Array.from(dialogElement.querySelectorAll<HTMLElement>(focusableSelector));
+    const initial = focusable()[0] ?? dialogElement;
     initial.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -49,10 +51,10 @@ export function FocusDialog({
       const elements = focusable();
       if (elements.length === 0) {
         event.preventDefault();
-        dialog.focus();
+        dialogElement.focus();
         return;
       }
-      if (!dialog.contains(document.activeElement)) {
+      if (!dialogElement.contains(document.activeElement)) {
         event.preventDefault();
         elements[0]?.focus();
         return;
