@@ -47,6 +47,23 @@ function cloneColumns(columns: ProjectColumnData[]): ProjectColumnData[] {
   return columns.map((column, position) => ({ ...column, position }));
 }
 
+function mergeColumnSnapshot(
+  current: ProjectColumnData[],
+  snapshot: ProjectColumnData[],
+): ProjectColumnData[] {
+  const snapshotIds = new Set(snapshot.map((column) => column.id));
+  const currentIds = new Set<string>();
+  const merged = current.filter((column) => {
+    if (!snapshotIds.has(column.id) || currentIds.has(column.id)) return false;
+    currentIds.add(column.id);
+    return true;
+  });
+  for (const column of snapshot) {
+    if (!currentIds.has(column.id)) merged.push(column);
+  }
+  return cloneColumns(merged);
+}
+
 function WipBadge({ column }: { column: ProjectColumnData }) {
   if (column.wipMode === "none") return <span className="wip-badge">WIP none</span>;
   return (
@@ -141,6 +158,7 @@ function WorkflowEditor({
       });
       setConfirmMeaning(false);
       setOpen(false);
+      setColumns(cloneColumns(response.project.columns ?? []));
       onSaved(response.project);
     } catch (caught) {
       if (
@@ -168,7 +186,7 @@ function WorkflowEditor({
       });
       setNewName("");
       onSaved(response.project);
-      setColumns(cloneColumns(response.project.columns ?? []));
+      setColumns((current) => mergeColumnSnapshot(current, response.project.columns ?? []));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "We could not add that column.");
     } finally {
@@ -186,7 +204,7 @@ function WorkflowEditor({
         { method: "DELETE", body: JSON.stringify({ expectedRevision: project.revision }) },
       );
       onSaved(response.project);
-      setColumns(cloneColumns(response.project.columns ?? []));
+      setColumns((current) => mergeColumnSnapshot(current, response.project.columns ?? []));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "We could not delete that column.");
     } finally {
@@ -870,7 +888,7 @@ export function BoardScreen({ projectId }: { projectId: string }) {
           <div className="board-header__actions">
             <ProjectDetailsEditor project={project} onSaved={applyProjectSnapshot} />
             <WorkflowEditor
-              key={project.revision}
+              key={project.id}
               project={project}
               onSaved={applyProjectSnapshot}
             />

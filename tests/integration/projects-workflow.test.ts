@@ -21,6 +21,7 @@ import {
   updateSwimlane,
 } from "@/server/modules/projects/service";
 import { assertColumnWip } from "@/server/modules/workflow/wip";
+import { DELETE as deleteProjectColumnRoute } from "@/app/api/projects/[projectId]/columns/[columnId]/route";
 import { DELETE as deleteProjectLabelRoute } from "@/app/api/projects/[projectId]/labels/[labelId]/route";
 import { DELETE as deleteProjectSwimlaneRoute } from "@/app/api/projects/[projectId]/swimlanes/[swimlaneId]/route";
 import { GET as getProject } from "@/app/api/projects/[projectId]/route";
@@ -414,6 +415,37 @@ integration("Phase 2 projects and workflow transactions", () => {
       { params: Promise.resolve({ projectId: created.project.id, labelId }) },
     );
     expect(emptyLabelDelete.status).toBe(200);
+
+    const bodylessColumn = await addColumn(
+      db,
+      account.id,
+      created.project.id,
+      { name: "Bodyless delete", role: "neutral" },
+    );
+    const bodylessColumnId = bodylessColumn.columns.find(
+      (column) => column.name === "Bodyless delete",
+    )!.id;
+    const malformedColumnDelete = await deleteProjectColumnRoute(
+      rawMutationWithSession(
+        session.token,
+        `/api/projects/${created.project.id}/columns/${bodylessColumnId}`,
+        "{malformed",
+      ),
+      { params: Promise.resolve({ projectId: created.project.id, columnId: bodylessColumnId }) },
+    );
+    expect(malformedColumnDelete.status).toBe(400);
+    const emptyColumnDelete = await deleteProjectColumnRoute(
+      rawMutationWithSession(
+        session.token,
+        `/api/projects/${created.project.id}/columns/${bodylessColumnId}`,
+        undefined,
+      ),
+      { params: Promise.resolve({ projectId: created.project.id, columnId: bodylessColumnId }) },
+    );
+    expect(emptyColumnDelete.status).toBe(200);
+    expect((await emptyColumnDelete.json()).project.columns).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: bodylessColumnId })]),
+    );
 
     const swimlaneId = movedLabel.swimlanes[0]!.id;
     const malformedSwimlaneDelete = await deleteProjectSwimlaneRoute(

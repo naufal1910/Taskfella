@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   getDatabase,
   parseJsonObject,
+  parseOptionalJsonObject,
   projectJson,
   projectRoute,
 } from "@/server/http/project-route";
@@ -53,7 +54,7 @@ export async function DELETE(request: Request, context: Context): Promise<NextRe
   return projectRoute(
     request,
     async ({ account }) => {
-      const body = await parseJsonObject(request);
+      const body = await parseOptionalJsonObject(request);
       const options = optionsFrom(body);
       if (!options)
         return projectJson(
