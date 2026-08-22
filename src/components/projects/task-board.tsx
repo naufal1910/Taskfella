@@ -821,6 +821,7 @@ export function TaskDetails({
                   onChange={(event) => setTitle(event.target.value)}
                   maxLength={240}
                   required
+                  aria-readonly={readOnly ? "true" : undefined}
                   disabled={readOnly}
                 />
               </label>
