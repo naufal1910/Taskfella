@@ -363,6 +363,8 @@ integration("Phase 3 tasks and board execution transactions", () => {
       title: "Route task",
       columnId: queue.id,
     });
+    const subtask = await createSubtask(db, account.id, task.task.id, "Route checklist item");
+    const note = await createNote(db, account.id, task.task.id, "Route journal note");
     const session = await createSession(db, account.id);
     const listed = await listTaskRoute(
       sessionRequest(session.token, `/api/projects/${board.project.id}/tasks`),
@@ -377,6 +379,12 @@ integration("Phase 3 tasks and board execution transactions", () => {
       { params: Promise.resolve({ projectId: board.project.id, taskId: task.task.id }) },
     );
     expect(detail.status).toBe(200);
+    expect((await detail.json()).task).toMatchObject({
+      subtasks: expect.arrayContaining([
+        expect.objectContaining({ id: subtask.subtasks[0]!.id }),
+      ]),
+      notes: expect.arrayContaining([expect.objectContaining({ id: note.notes[0]!.id })]),
+    });
     const malformed = await getTaskRoute(
       sessionRequest(session.token, "/api/projects/not-a-uuid/tasks/not-a-uuid"),
       { params: Promise.resolve({ projectId: "not-a-uuid", taskId: "not-a-uuid" }) },

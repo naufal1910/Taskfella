@@ -2,8 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { TaskDetails } from "@/components/projects/task-board";
-import type { TaskData } from "@/components/projects/project-api";
+import { TaskBoardColumn, TaskDetails } from "@/components/projects/task-board";
+import type { SwimlaneData, TaskData } from "@/components/projects/project-api";
 
 const project = {
   id: "00000000-0000-0000-0000-000000000001",
@@ -28,7 +28,20 @@ const project = {
       completedGrouping: "list" as const,
     },
   ],
-  swimlanes: [],
+  swimlanes: [
+    {
+      id: "00000000-0000-0000-0000-000000000005",
+      projectId: "00000000-0000-0000-0000-000000000001",
+      name: "Personal",
+      position: 0,
+    },
+    {
+      id: "00000000-0000-0000-0000-000000000006",
+      projectId: "00000000-0000-0000-0000-000000000001",
+      name: "Later",
+      position: 1,
+    },
+  ],
   labels: [],
 };
 
@@ -59,6 +72,15 @@ function task(color: string | null): TaskData {
   };
 }
 
+function lane(id: string, name: string, position: number): SwimlaneData {
+  return {
+    id,
+    projectId: project.id,
+    name,
+    position,
+  };
+}
+
 describe("task color details control", () => {
   it("keeps an uncolored task visibly unset while exposing an accessible clear action", () => {
     const html = renderToStaticMarkup(
@@ -78,6 +100,81 @@ describe("task color details control", () => {
     expect(html).toContain("No color set");
   });
 
+  it("renders retained subtasks and notes from a full task snapshot", () => {
+    const fullTask = task(null);
+    fullTask.subtasks = [
+      {
+        id: "00000000-0000-0000-0000-000000000007",
+        taskId: fullTask.id,
+        projectId: project.id,
+        accountId: project.accountId,
+        text: "Existing checklist item",
+        completed: true,
+        position: 0,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    fullTask.notes = [
+      {
+        id: "00000000-0000-0000-0000-000000000008",
+        taskId: fullTask.id,
+        projectId: project.id,
+        accountId: project.accountId,
+        body: "Existing journal note",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    fullTask.subtaskCount = 1;
+    fullTask.completedSubtaskCount = 1;
+    fullTask.noteCount = 1;
+
+    const html = renderToStaticMarkup(
+      createElement(TaskDetails, {
+        project,
+        task: fullTask,
+        onClose: vi.fn(),
+        onChanged: vi.fn(),
+        trigger: null,
+      }),
+    );
+
+    expect(html).toContain("Existing checklist item");
+    expect(html).toContain("Existing journal note");
+    expect(html).toContain("1/1");
+  });
+
+  it("exposes accessible loading and retry states while the full snapshot is fetched", () => {
+    const loadingHtml = renderToStaticMarkup(
+      createElement(TaskDetails, {
+        project,
+        task: task(null),
+        onClose: vi.fn(),
+        onChanged: vi.fn(),
+        trigger: null,
+        loading: true,
+      }),
+    );
+    const retryHtml = renderToStaticMarkup(
+      createElement(TaskDetails, {
+        project,
+        task: task(null),
+        onClose: vi.fn(),
+        onChanged: vi.fn(),
+        trigger: null,
+        loadError: "The task could not be loaded.",
+        onRetry: vi.fn(),
+      }),
+    );
+
+    expect(loadingHtml).toContain('role="status"');
+    expect(loadingHtml).toContain("Loading full task details");
+    expect(retryHtml).toContain('role="alert"');
+    expect(retryHtml).toContain("The task could not be loaded.");
+    expect(retryHtml).toContain("Try again");
+  });
+
   it("shows the saved color without replacing the clear action", () => {
     const html = renderToStaticMarkup(
       createElement(TaskDetails, {
@@ -92,5 +189,59 @@ describe("task color details control", () => {
     expect(html).toContain('value="#246BCE"');
     expect(html).toContain("Using #246BCE");
     expect(html).toContain('aria-label="Clear card color"');
+  });
+});
+
+describe("task board lane presentation", () => {
+  it("keeps persisted lane order visible and makes quick creation lane-aware", () => {
+    const firstLane = lane(project.swimlanes[0]!.id, project.swimlanes[0]!.name, 1);
+    const secondLane = lane(project.swimlanes[1]!.id, project.swimlanes[1]!.name, 0);
+    const boardProject = { ...project, swimlanes: [firstLane, secondLane] };
+    const personalLate = {
+      ...task(null),
+      id: "00000000-0000-0000-0000-000000000009",
+      title: "Personal later",
+      swimlaneId: firstLane.id,
+      position: 1,
+    };
+    const personalFirst = {
+      ...task(null),
+      id: "00000000-0000-0000-0000-000000000010",
+      title: "Personal first",
+      swimlaneId: firstLane.id,
+      position: 0,
+    };
+    const laterTask = {
+      ...task(null),
+      id: "00000000-0000-0000-0000-000000000011",
+      title: "Later task",
+      swimlaneId: secondLane.id,
+      position: 0,
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(TaskBoardColumn, {
+        column: project.columns[0]!,
+        active: true,
+        project: boardProject,
+        tasks: [personalLate, laterTask, personalFirst],
+        quickCreateSwimlaneId: firstLane.id,
+        onQuickCreateSwimlaneChange: vi.fn(),
+        disabled: false,
+        onCreate: vi.fn(async () => undefined),
+        onOpen: vi.fn(),
+        onMove: vi.fn(),
+        onDropOnTask: vi.fn(),
+        onDropOnLane: vi.fn(),
+      }),
+    );
+
+    expect(html).toContain("Swimlane for new task in Queued");
+    expect(html).toContain('aria-label="Tasks in Queued, Personal"');
+    expect(html).toContain('aria-label="Tasks in Queued, Later"');
+    expect(html.indexOf("Later</h4>")).toBeLessThan(html.indexOf("Personal</h4>"));
+    expect(html.indexOf("Personal first")).toBeLessThan(html.indexOf("Personal later"));
+    expect(html).toContain("Personal");
+    expect(html).toContain("Later task");
   });
 });
