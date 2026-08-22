@@ -607,8 +607,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
       verificationAttemptToken.current = undefined;
       setPending(false);
       setAccepted(undefined);
-      // Removing the fragment after a successful request must not hide its outcome.
-      if (!success) setSuccess(undefined);
+      // Keep a successful outcome visible after history.replaceState removes the fragment.
       setFieldErrors({});
       setErrorCode(undefined);
       setError(undefined);
@@ -617,7 +616,7 @@ export function AuthForm({ mode, token }: AuthFormProps) {
     if (!shouldStartVerificationAttempt(verificationAttemptToken.current, effectiveToken)) return;
     verificationAttemptToken.current = effectiveToken;
     void submit();
-  }, [effectiveToken, isVerify, submit, success]);
+  }, [effectiveToken, isVerify, submit]);
 
   const tokenMissing = isTokenMode && !effectiveToken;
   if (isVerify && success) {
