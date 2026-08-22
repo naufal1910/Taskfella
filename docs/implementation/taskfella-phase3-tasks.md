@@ -24,7 +24,7 @@ Migration `0009_clammy_miss_america.sql` is the only new Phase 3 migration artif
 
 Every task, child record, label join, search/filter query, movement, ordering change, restore, Trash action, and permanent deletion operation is scoped through the authenticated account and validated again in the domain service. Permanent task deletion requires the exact task title and is only available from Trash; ordinary deletion is reversible.
 
-Trash retains notes, subtasks, labels, lifecycle history, and task identity. Restore first attempts the saved column, swimlane, and position; if a parent was removed it falls back to the first non-completed column and no swimlane. Archived projects remain archived during restore. Removing a workflow column or swimlane updates only hidden/current foreign-key locations while retaining restoration metadata.
+Trash retains notes, subtasks, labels, lifecycle history, and task identity. Restore first attempts the saved column, swimlane, and position; if a parent was removed it falls back to the first non-completed column and no swimlane. Archived projects remain readable but reject task mutations, including restore, until the project is restored. Removing a workflow column or swimlane updates only hidden/current foreign-key locations while retaining restoration metadata.
 
 ## API surface
 

@@ -244,4 +244,48 @@ describe("task board lane presentation", () => {
     expect(html).toContain("Personal");
     expect(html).toContain("Later task");
   });
+
+  it("keeps archived tasks readable while disabling board mutations", () => {
+    const archivedProject = {
+      ...project,
+      status: "archived" as const,
+      archivedAt: "2026-01-02T00:00:00.000Z",
+    };
+    const archivedTask = { ...task(null), description: "Read-only description" };
+    const columnHtml = renderToStaticMarkup(
+      createElement(TaskBoardColumn, {
+        column: archivedProject.columns[0]!,
+        active: true,
+        project: archivedProject,
+        tasks: [archivedTask],
+        quickCreateSwimlaneId: null,
+        onQuickCreateSwimlaneChange: vi.fn(),
+        disabled: true,
+        onCreate: vi.fn(async () => undefined),
+        onOpen: vi.fn(),
+        onMove: vi.fn(),
+        onDropOnTask: vi.fn(),
+        onDropOnLane: vi.fn(),
+      }),
+    );
+    expect(columnHtml).toContain('id="quick-create-00000000-0000-0000-0000-000000000003"');
+    expect(columnHtml).toContain('disabled=""');
+    expect(columnHtml).toContain('name="move-task-00000000-0000-0000-0000-000000000004"');
+
+    const detailsHtml = renderToStaticMarkup(
+      createElement(TaskDetails, {
+        project: archivedProject,
+        task: archivedTask,
+        onClose: vi.fn(),
+        onChanged: vi.fn(),
+        trigger: null,
+      }),
+    );
+    expect(detailsHtml).toContain('aria-readonly="true"');
+    expect(detailsHtml).toContain("This project is archived and read-only.");
+    expect(detailsHtml).toContain('value="A task"');
+    expect(detailsHtml).toContain("Read-only description");
+    expect(detailsHtml).toContain('aria-label="Clear card color"');
+    expect(detailsHtml).toContain('disabled=""');
+  });
 });

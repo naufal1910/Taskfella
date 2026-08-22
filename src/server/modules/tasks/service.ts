@@ -133,6 +133,7 @@ async function lockProjectRow(
     .where(and(eq(projects.id, normalizedProjectId), eq(projects.accountId, accountId)))
     .for("update");
   if (!project) throw new AppError("NOT_FOUND");
+  if (project.status !== "active") throw new AppError("PROJECT_ARCHIVED");
   return project;
 }
 
@@ -493,7 +494,6 @@ export async function createTask(
 
   return db.transaction(async (tx) => {
     const project = await lockProjectRow(tx, accountId, projectId);
-    if (project.status !== "active") throw new AppError("PROJECT_ARCHIVED");
     let columnId = rawInput.columnId;
     if (columnId === undefined) {
       const [active] = await tx

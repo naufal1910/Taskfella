@@ -416,7 +416,7 @@ Trash actions:
 - Restore;
 - Delete permanently.
 
-Restore attempts to return the task to its previous column/swimlane and best-effort previous position. If the original swimlane no longer exists, restore to the original column without a swimlane. If the original column no longer exists, restore to the first non-completed column. If the project itself is archived, restoration occurs inside that archived project rather than silently reactivating it.
+Restore attempts to return the task to its previous column/swimlane and best-effort previous position. If the original swimlane no longer exists, restore to the original column without a swimlane. If the original column no longer exists, restore to the first non-completed column. If the project itself is archived, task restoration is rejected until the project is restored; archiving makes the board read-only while retaining its history.
 
 Permanent task deletion removes the source data and its contribution to analytics.
 

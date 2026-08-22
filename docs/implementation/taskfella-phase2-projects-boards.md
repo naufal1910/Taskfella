@@ -4,7 +4,7 @@ Phase 2 delivers the account-owned board foundation from [issue #4](https://gith
 
 ## Product boundary
 
-A project is the board in this phase. It has an owner account, name, constrained description, active/archived lifecycle, stable order, a revision for optimistic concurrency, and retained lifecycle events. Archive and restore never remove workflow data. Permanent deletion is a separate destructive action and requires the exact project name in the request; the UI requires the same typed confirmation before enabling the final button.
+A project is the board in this phase. It has an owner account, name, constrained description, active/archived lifecycle, stable order, a revision for optimistic concurrency, and retained lifecycle events. Archive and restore never remove workflow data. Archived boards remain readable but reject project-setting and task mutations until restored; lifecycle restore and typed permanent deletion remain available. Permanent deletion is a separate destructive action and requires the exact project name in the request; the UI requires the same typed confirmation before enabling the final button.
 
 Project creation supports:
 

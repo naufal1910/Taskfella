@@ -566,6 +566,16 @@ integration("Phase 2 projects and workflow transactions", () => {
     const archived = await archiveProject(db, account.id, snapshot.project.id);
     expect(archived.project.status).toBe("archived");
     expect(archived.columns).toHaveLength(3);
+    await expect(
+      updateColumn(
+        db,
+        account.id,
+        snapshot.project.id,
+        archived.columns[0]!.id,
+        { name: "Blocked" },
+        { expectedRevision: archived.project.revision },
+      ),
+    ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
     const restored = await restoreProject(db, account.id, snapshot.project.id);
     expect(restored.project.status).toBe("active");
     expect(restored.columns).toHaveLength(3);

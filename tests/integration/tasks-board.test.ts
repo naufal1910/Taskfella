@@ -4,11 +4,13 @@ import { closeDatabase, getDatabase } from "@/server/db/client";
 import { accounts, taskLabels, taskLifecycleEvents, tasks } from "@/server/db/schema";
 import { createAccount } from "@/server/modules/auth/accounts";
 import {
+  archiveProject,
   createProject,
   createLabel,
   createSwimlane,
   deleteColumn,
   deleteSwimlane,
+  restoreProject,
   updateColumn,
 } from "@/server/modules/projects/service";
 import {
@@ -27,7 +29,11 @@ import {
   updateSubtask,
   updateTask,
 } from "@/server/modules/tasks/service";
-import { GET as getTaskRoute } from "@/app/api/projects/[projectId]/tasks/[taskId]/route";
+import {
+  DELETE as deleteTaskRoute,
+  GET as getTaskRoute,
+  PATCH as patchTaskRoute,
+} from "@/app/api/projects/[projectId]/tasks/[taskId]/route";
 import { GET as listTaskRoute } from "@/app/api/projects/[projectId]/tasks/route";
 import { createSession } from "@/server/modules/auth/sessions";
 
@@ -47,6 +53,20 @@ async function owner(prefix: string) {
 function sessionRequest(session: string, path: string): Request {
   return new Request(`http://localhost:3000${path}`, {
     headers: { cookie: `taskfella_session=${session}` },
+  });
+}
+
+function mutationRequest(session: string, path: string, body: unknown, method = "POST"): Request {
+  const csrf = `csrf-${crypto.randomUUID()}`;
+  return new Request(`http://localhost:3000${path}`, {
+    method,
+    headers: {
+      origin: "http://localhost:3000",
+      cookie: `taskfella_session=${session}; taskfella_csrf=${csrf}`,
+      "x-csrf-token": csrf,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
   });
 }
 
@@ -351,6 +371,78 @@ integration("Phase 3 tasks and board execution transactions", () => {
     ).toHaveLength(0);
   });
 
+  it("keeps archived task data readable but rejects every task mutation until restore", async () => {
+    if (!db) return;
+    const account = await owner("tasks-archived");
+    const board = await createProject(db, account.id, {
+      name: "Archived task board",
+      template: "simple",
+    });
+    const queue = board.columns.find((column) => column.role === "queued")!;
+    const task = await createTask(db, account.id, board.project.id, {
+      title: "Retained task",
+      columnId: queue.id,
+    });
+    const subtask = await createSubtask(db, account.id, task.task.id, "Retained checklist");
+    const note = await createNote(db, account.id, task.task.id, "Retained note");
+    const trashed = await createTask(db, account.id, board.project.id, {
+      title: "Retained trash task",
+      columnId: queue.id,
+    });
+    await trashTask(db, account.id, trashed.task.id);
+    const archived = await archiveProject(db, account.id, board.project.id);
+
+    expect((await getTask(db, account.id, task.task.id)).task.title).toBe("Retained task");
+    expect(
+      (await listTasks(db, account.id, board.project.id, { timezone: "UTC" })).map(
+        (item) => item.id,
+      ),
+    ).toContain(task.task.id);
+
+    await expect(
+      createTask(db, account.id, board.project.id, { title: "Blocked task", columnId: queue.id }),
+    ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    await expect(
+      updateTask(db, account.id, task.task.id, { title: "Blocked update" }),
+    ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    await expect(
+      moveTask(db, account.id, task.task.id, { columnId: queue.id }),
+    ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    await expect(trashTask(db, account.id, task.task.id)).rejects.toMatchObject({
+      code: "PROJECT_ARCHIVED",
+    });
+    await expect(
+      createSubtask(db, account.id, task.task.id, "Blocked checklist"),
+    ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    await expect(
+      updateSubtask(db, account.id, task.task.id, subtask.subtasks[0]!.id, { completed: true }),
+    ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    await expect(
+      deleteSubtask(db, account.id, task.task.id, subtask.subtasks[0]!.id),
+    ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    await expect(createNote(db, account.id, task.task.id, "Blocked note")).rejects.toMatchObject({
+      code: "PROJECT_ARCHIVED",
+    });
+    await expect(
+      updateNote(db, account.id, task.task.id, note.notes[0]!.id, "Blocked note update"),
+    ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+    await expect(deleteNote(db, account.id, task.task.id, note.notes[0]!.id)).rejects.toMatchObject(
+      { code: "PROJECT_ARCHIVED" },
+    );
+    await expect(restoreTask(db, account.id, trashed.task.id)).rejects.toMatchObject({
+      code: "PROJECT_ARCHIVED",
+    });
+    await expect(
+      permanentlyDeleteTask(db, account.id, trashed.task.id, trashed.task.title),
+    ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
+
+    expect((await getTask(db, account.id, task.task.id)).task.title).toBe("Retained task");
+    const restoredProject = await restoreProject(db, account.id, archived.project.id);
+    expect(restoredProject.project.status).toBe("active");
+    const updated = await updateTask(db, account.id, task.task.id, { title: "Active again" });
+    expect(updated.task.title).toBe("Active again");
+  });
+
   it("exposes authenticated list/detail routes and rejects malformed or foreign IDs safely", async () => {
     if (!db) return;
     const account = await owner("tasks-routes");
@@ -380,9 +472,7 @@ integration("Phase 3 tasks and board execution transactions", () => {
     );
     expect(detail.status).toBe(200);
     expect((await detail.json()).task).toMatchObject({
-      subtasks: expect.arrayContaining([
-        expect.objectContaining({ id: subtask.subtasks[0]!.id }),
-      ]),
+      subtasks: expect.arrayContaining([expect.objectContaining({ id: subtask.subtasks[0]!.id })]),
       notes: expect.arrayContaining([expect.objectContaining({ id: note.notes[0]!.id })]),
     });
     const malformed = await getTaskRoute(
@@ -405,5 +495,46 @@ integration("Phase 3 tasks and board execution transactions", () => {
       { params: Promise.resolve({ projectId: board.project.id, taskId: "not-a-uuid" }) },
     );
     expect(malformedMutation.status).toBe(400);
+
+    const archived = await archiveProject(db, account.id, board.project.id);
+    const archivedList = await listTaskRoute(
+      sessionRequest(session.token, `/api/projects/${board.project.id}/tasks`),
+      { params: Promise.resolve({ projectId: board.project.id }) },
+    );
+    expect(archivedList.status).toBe(200);
+    const blockedPatch = await patchTaskRoute(
+      mutationRequest(
+        session.token,
+        `/api/projects/${board.project.id}/tasks/${task.task.id}`,
+        { title: "Blocked route update" },
+        "PATCH",
+      ),
+      { params: Promise.resolve({ projectId: board.project.id, taskId: task.task.id }) },
+    );
+    expect(blockedPatch.status).toBe(409);
+    expect(await blockedPatch.json()).toMatchObject({ error: { code: "PROJECT_ARCHIVED" } });
+    const blockedDelete = await deleteTaskRoute(
+      mutationRequest(
+        session.token,
+        `/api/projects/${board.project.id}/tasks/${task.task.id}`,
+        {},
+        "DELETE",
+      ),
+      { params: Promise.resolve({ projectId: board.project.id, taskId: task.task.id }) },
+    );
+    expect(blockedDelete.status).toBe(409);
+    expect(await blockedDelete.json()).toMatchObject({ error: { code: "PROJECT_ARCHIVED" } });
+    await restoreProject(db, account.id, archived.project.id);
+    const activePatch = await patchTaskRoute(
+      mutationRequest(
+        session.token,
+        `/api/projects/${board.project.id}/tasks/${task.task.id}`,
+        { title: "Active route update" },
+        "PATCH",
+      ),
+      { params: Promise.resolve({ projectId: board.project.id, taskId: task.task.id }) },
+    );
+    expect(activePatch.status).toBe(200);
+    expect((await activePatch.json()).task.title).toBe("Active route update");
   });
 });

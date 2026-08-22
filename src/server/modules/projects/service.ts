@@ -159,6 +159,20 @@ async function lockProjectRow(
   return project;
 }
 
+function assertActiveProject(project: Project): void {
+  if (project.status !== "active") throw new AppError("PROJECT_ARCHIVED");
+}
+
+async function lockActiveProjectRow(
+  db: ProjectDatabase,
+  accountId: string,
+  projectId: string,
+): Promise<Project> {
+  const project = await lockProjectRow(db, accountId, projectId);
+  assertActiveProject(project);
+  return project;
+}
+
 async function getOwnedProject(
   db: ProjectDatabase,
   accountId: string,
@@ -350,7 +364,7 @@ export async function updateProject(
       : normalizeProjectDescription(rawPatch.description);
 
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(rawPatch.expectedRevision, project.revision);
     if (name === undefined && description === undefined) {
       return getProjectSnapshot(tx, accountId, projectId);
@@ -633,7 +647,7 @@ export async function configureColumns(
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     return applyColumnDrafts(tx, accountId, project, rawDrafts, options, now);
   });
@@ -648,7 +662,7 @@ export async function addColumn(
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const current = await tx
       .select()
@@ -705,7 +719,7 @@ export async function updateColumn(
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const current = await tx
       .select()
@@ -755,7 +769,7 @@ export async function reorderColumns(
   }
   const normalizedColumnIds = orderedColumnIds.map((id) => normalizeUuid(id));
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const current = await tx
       .select()
@@ -787,7 +801,7 @@ export async function deleteColumn(
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const current = await tx
       .select()
@@ -852,7 +866,7 @@ export async function createSwimlane(
 ): Promise<ProjectSnapshot> {
   const name = normalizeSwimlaneName(rawName);
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const [last] = await tx
       .select({ position: swimlanes.position })
@@ -890,7 +904,7 @@ export async function updateSwimlane(
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const normalizedSwimlaneId = normalizeUuid(swimlaneId);
     const current = await tx
@@ -936,7 +950,7 @@ export async function reorderSwimlanes(
   }
   const normalizedIds = orderedIds.map((id) => normalizeUuid(id));
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const current = await tx
       .select()
@@ -1003,7 +1017,7 @@ export async function deleteSwimlane(
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const normalizedSwimlaneId = normalizeUuid(swimlaneId);
     const [lane] = await tx
@@ -1061,7 +1075,7 @@ export async function createLabel(
   const name = normalizeLabelName(input.name);
   const color = normalizeColor(input.color);
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const [last] = await tx
       .select({ position: labels.position })
@@ -1101,7 +1115,7 @@ export async function updateLabel(
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const normalizedLabelId = normalizeUuid(labelId);
     const current = await tx
@@ -1155,7 +1169,7 @@ export async function reorderLabels(
     throw new AppError("INVALID_REQUEST");
   const normalizedIds = orderedIds.map((id) => normalizeUuid(id));
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const current = await tx
       .select()
@@ -1192,7 +1206,7 @@ export async function deleteLabel(
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
-    const project = await lockProjectRow(tx, accountId, projectId);
+    const project = await lockActiveProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
     const normalizedLabelId = normalizeUuid(labelId);
     const deleted = await tx

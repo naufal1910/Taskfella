@@ -86,12 +86,14 @@ function dueLabel(dueDate: string | null): string | undefined {
 function TaskCard({
   task,
   project,
+  readOnly,
   onOpen,
   onMove,
   onDropOnTask,
 }: {
   task: TaskData;
   project: BoardProject;
+  readOnly: boolean;
   onOpen: (task: TaskData, trigger: HTMLElement) => void;
   onMove: MoveTask;
   onDropOnTask: (event: DragEvent<HTMLElement>, task: TaskData) => void;
@@ -104,14 +106,14 @@ function TaskCard({
   return (
     <div
       className="task-card"
-      draggable={!task.deletedAt}
+      draggable={!task.deletedAt && !readOnly}
       style={task.color ? { borderInlineStartColor: task.color } : undefined}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/task-id", task.id);
       }}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => onDropOnTask(event, task)}
+      onDragOver={readOnly ? undefined : (event) => event.preventDefault()}
+      onDrop={readOnly ? undefined : (event) => onDropOnTask(event, task)}
       aria-label={`Task ${task.title}`}
       role="listitem"
     >
@@ -165,6 +167,7 @@ function TaskCard({
                 currentSwimlane?.name ?? "No swimlane"
               }`}
               value={moveValue}
+              disabled={readOnly}
               onChange={(event) => {
                 const destination = event.target.value;
                 setMoveValue("");
@@ -193,7 +196,7 @@ function TaskCard({
             onClick={() =>
               onMove(task, task.columnId, task.swimlaneId, Math.max(0, task.position - 1))
             }
-            disabled={task.position === 0}
+            disabled={readOnly || task.position === 0}
           >
             ↑
           </button>
@@ -202,6 +205,7 @@ function TaskCard({
             type="button"
             aria-label={`Move ${task.title} down`}
             onClick={() => onMove(task, task.columnId, task.swimlaneId, task.position + 1)}
+            disabled={readOnly}
           >
             ↓
           </button>
@@ -402,6 +406,7 @@ export function TaskBoardColumn({
                     key={task.id}
                     task={task}
                     project={project}
+                    readOnly={disabled}
                     onOpen={onOpen}
                     onMove={onMove}
                     onDropOnTask={onDropOnTask}
@@ -461,6 +466,7 @@ export function TaskDetails({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const previousFocus = useRef<HTMLElement | null>(trigger);
+  const readOnly = project.status === "archived";
 
   useEffect(() => {
     const previous = previousFocus.current;
@@ -495,6 +501,7 @@ export function TaskDetails({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (readOnly) return;
     setSaving(true);
     setError(undefined);
     const payload = {
@@ -539,7 +546,7 @@ export function TaskDetails({
 
   async function addSubtask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!subtaskText.trim()) return;
+    if (readOnly || !subtaskText.trim()) return;
     setSaving(true);
     try {
       const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id, "/subtasks"), {
@@ -556,6 +563,7 @@ export function TaskDetails({
   }
 
   async function toggleSubtask(subtask: SubtaskData) {
+    if (readOnly) return;
     setSaving(true);
     try {
       const response = await apiRequest<TaskResponse>(
@@ -574,7 +582,7 @@ export function TaskDetails({
   }
 
   async function deleteSubtask(subtask: SubtaskData) {
-    if (!window.confirm(`Delete subtask “${subtask.text}”?`)) return;
+    if (readOnly || !window.confirm(`Delete subtask “${subtask.text}”?`)) return;
     setSaving(true);
     try {
       const response = await apiRequest<TaskResponse>(
@@ -591,7 +599,7 @@ export function TaskDetails({
 
   async function addNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!noteBody.trim()) return;
+    if (readOnly || !noteBody.trim()) return;
     setSaving(true);
     try {
       const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id, "/notes"), {
@@ -608,6 +616,7 @@ export function TaskDetails({
   }
 
   async function editNote(note: NonNullable<TaskData["notes"]>[number]) {
+    if (readOnly) return;
     const body = window.prompt("Edit note Markdown", note.body);
     if (body === null || !body.trim()) return;
     setSaving(true);
@@ -625,7 +634,7 @@ export function TaskDetails({
   }
 
   async function deleteNote(note: NonNullable<TaskData["notes"]>[number]) {
-    if (!window.confirm("Delete this personal note?")) return;
+    if (readOnly || !window.confirm("Delete this personal note?")) return;
     setSaving(true);
     try {
       const response = await apiRequest<TaskResponse>(
@@ -642,6 +651,7 @@ export function TaskDetails({
 
   async function trash() {
     if (
+      readOnly ||
       !window.confirm("Move this task to Trash? Its notes, subtasks, and history will be retained.")
     )
       return;
@@ -661,6 +671,7 @@ export function TaskDetails({
   }
 
   async function restore() {
+    if (readOnly) return;
     setSaving(true);
     try {
       const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id, "/restore"), {
@@ -689,6 +700,7 @@ export function TaskDetails({
   }
 
   async function permanentlyDelete() {
+    if (readOnly) return;
     const confirmation = window.prompt(
       `Type the task title exactly to permanently delete “${task.title}”.`,
     );
@@ -725,6 +737,7 @@ export function TaskDetails({
         aria-modal="true"
         aria-labelledby="task-detail-title"
         aria-describedby="task-detail-context"
+        aria-readonly={readOnly}
         aria-busy={loading}
       >
         <header className="task-detail-panel__header">
@@ -751,6 +764,11 @@ export function TaskDetails({
             {error ?? loadError}
           </p>
         )}
+        {readOnly && (
+          <p className="inline-alert" role="status">
+            This project is archived and read-only. Restore it to change tasks or board data.
+          </p>
+        )}
         {loading ? (
           <div className="loading-panel" role="status" aria-live="polite">
             Loading full task details…
@@ -770,14 +788,18 @@ export function TaskDetails({
           <div className="task-trash-actions">
             <p>This task is in Trash. Its planning history is retained until permanent deletion.</p>
             <div className="dialog-actions">
-              <Button variant="primary" onClick={() => void restore()} disabled={saving}>
+              <Button
+                variant="primary"
+                onClick={() => void restore()}
+                disabled={saving || readOnly}
+              >
                 Restore task
               </Button>
               <button
                 className="ui-button ui-button--destructive"
                 type="button"
                 onClick={() => void permanentlyDelete()}
-                disabled={saving}
+                disabled={saving || readOnly}
               >
                 Delete permanently
               </button>
@@ -794,6 +816,7 @@ export function TaskDetails({
                   onChange={(event) => setTitle(event.target.value)}
                   maxLength={240}
                   required
+                  disabled={readOnly}
                 />
               </label>
               <label className="field" htmlFor="task-description">
@@ -805,6 +828,7 @@ export function TaskDetails({
                   onChange={(event) => setDescription(event.target.value)}
                   rows={6}
                   maxLength={50000}
+                  disabled={readOnly}
                 />
               </label>
               <div className="task-detail-grid">
@@ -814,6 +838,7 @@ export function TaskDetails({
                     id="task-column"
                     value={columnId}
                     onChange={(event) => setColumnId(event.target.value)}
+                    disabled={readOnly}
                   >
                     {project.columns.map((column) => (
                       <option value={column.id} key={column.id}>
@@ -828,6 +853,7 @@ export function TaskDetails({
                     id="task-swimlane"
                     value={swimlaneId}
                     onChange={(event) => setSwimlaneId(event.target.value)}
+                    disabled={readOnly}
                   >
                     <option value="">No swimlane</option>
                     {project.swimlanes.map((lane) => (
@@ -844,6 +870,7 @@ export function TaskDetails({
                     type="date"
                     value={dueDate}
                     onChange={(event) => setDueDate(event.target.value)}
+                    disabled={readOnly}
                   />
                 </label>
                 <div className="field">
@@ -854,12 +881,14 @@ export function TaskDetails({
                     value={color ?? DEFAULT_TASK_COLOR}
                     aria-describedby="task-color-help"
                     onChange={(event) => setColor(event.target.value)}
+                    disabled={readOnly}
                   />
                   <button
                     className="text-button"
                     type="button"
                     aria-label="Clear card color"
                     onClick={() => setColor(null)}
+                    disabled={readOnly}
                   >
                     Clear card color
                   </button>
@@ -876,6 +905,7 @@ export function TaskDetails({
                       <input
                         type="checkbox"
                         checked={labelIds.includes(label.id)}
+                        disabled={readOnly}
                         onChange={(event) =>
                           setLabelIds((current) =>
                             event.target.checked
@@ -897,14 +927,14 @@ export function TaskDetails({
                 <MarkdownPreview value={description} />
               </div>
               <div className="dialog-actions">
-                <Button variant="primary" type="submit" disabled={saving}>
+                <Button variant="primary" type="submit" disabled={saving || readOnly}>
                   {saving ? "Saving…" : "Save details"}
                 </Button>
                 <button
                   className="ui-button ui-button--destructive"
                   type="button"
                   onClick={() => void trash()}
-                  disabled={saving}
+                  disabled={saving || readOnly}
                 >
                   Move to Trash
                 </button>
@@ -928,6 +958,7 @@ export function TaskDetails({
                         type="checkbox"
                         checked={subtask.completed}
                         onChange={() => void toggleSubtask(subtask)}
+                        disabled={saving || readOnly}
                       />{" "}
                       <span className={subtask.completed ? "is-complete" : undefined}>
                         {subtask.text}
@@ -937,7 +968,7 @@ export function TaskDetails({
                       className="text-button text-button--danger"
                       type="button"
                       onClick={() => void deleteSubtask(subtask)}
-                      disabled={saving}
+                      disabled={saving || readOnly}
                     >
                       Delete
                     </button>
@@ -954,11 +985,12 @@ export function TaskDetails({
                   onChange={(event) => setSubtaskText(event.target.value)}
                   placeholder="Add a checklist item"
                   maxLength={500}
+                  disabled={readOnly}
                 />
                 <button
                   className="ui-button ui-button--secondary"
                   type="submit"
-                  disabled={saving || !subtaskText.trim()}
+                  disabled={saving || readOnly || !subtaskText.trim()}
                 >
                   Add
                 </button>
@@ -984,7 +1016,7 @@ export function TaskDetails({
                         className="text-button"
                         type="button"
                         onClick={() => void editNote(note)}
-                        disabled={saving}
+                        disabled={saving || readOnly}
                       >
                         Edit
                       </button>
@@ -992,7 +1024,7 @@ export function TaskDetails({
                         className="text-button text-button--danger"
                         type="button"
                         onClick={() => void deleteNote(note)}
-                        disabled={saving}
+                        disabled={saving || readOnly}
                       >
                         Delete
                       </button>
@@ -1009,12 +1041,13 @@ export function TaskDetails({
                     onChange={(event) => setNoteBody(event.target.value)}
                     rows={3}
                     maxLength={20000}
+                    disabled={readOnly}
                   />
                 </label>
                 <button
                   className="ui-button ui-button--secondary"
                   type="submit"
-                  disabled={saving || !noteBody.trim()}
+                  disabled={saving || readOnly || !noteBody.trim()}
                 >
                   Add note
                 </button>
@@ -1124,14 +1157,14 @@ export function TaskBoard({ project }: { project: BoardProject }) {
       if (event.key === "/") {
         event.preventDefault();
         searchInputRef.current?.focus();
-      } else if (event.key.toLowerCase() === "n" && !showTrash) {
+      } else if (event.key.toLowerCase() === "n" && !showTrash && project.status !== "archived") {
         event.preventDefault();
         if (activeColumn) document.getElementById(`quick-create-${activeColumn}`)?.focus();
       }
     };
     window.addEventListener("keydown", onShortcut);
     return () => window.removeEventListener("keydown", onShortcut);
-  }, [activeColumn, showTrash]);
+  }, [activeColumn, project.status, showTrash]);
 
   async function loadTaskDetails(taskId: string, requestId: number) {
     try {
@@ -1199,6 +1232,7 @@ export function TaskBoard({ project }: { project: BoardProject }) {
     columnId: string,
     swimlaneId: string | null,
   ) {
+    if (project.status === "archived") return;
     try {
       const response = await apiRequest<TaskResponse>(`/api/projects/${project.id}/tasks`, {
         method: "POST",
@@ -1228,6 +1262,7 @@ export function TaskBoard({ project }: { project: BoardProject }) {
     position?: number,
     warningConfirmed = false,
   ) {
+    if (project.status === "archived") return;
     try {
       const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id, "/move"), {
         method: "POST",
@@ -1244,11 +1279,7 @@ export function TaskBoard({ project }: { project: BoardProject }) {
     }
   }
 
-  function dropOnLane(
-    event: DragEvent<HTMLElement>,
-    columnId: string,
-    swimlaneId: string | null,
-  ) {
+  function dropOnLane(event: DragEvent<HTMLElement>, columnId: string, swimlaneId: string | null) {
     event.preventDefault();
     event.stopPropagation();
     const taskId = event.dataTransfer.getData("text/task-id") || draggedTaskId;
@@ -1384,9 +1415,11 @@ export function TaskBoard({ project }: { project: BoardProject }) {
           </label>
         </div>
         <p className="task-board-hint" aria-live="polite">
-          {showTrash
-            ? "Trash keeps task history until you deliberately delete it permanently."
-            : "Drag is optional. Use Move to…, the arrow buttons, or the task details panel with keyboard or touch."}
+          {project.status === "archived"
+            ? "This project is archived and read-only. Restore it to change tasks or board data."
+            : showTrash
+              ? "Trash keeps task history until you deliberately delete it permanently."
+              : "Drag is optional. Use Move to…, the arrow buttons, or the task details panel with keyboard or touch."}
         </p>
       </section>
       {error && (
@@ -1425,6 +1458,7 @@ export function TaskBoard({ project }: { project: BoardProject }) {
                   key={task.id}
                   task={task}
                   project={project}
+                  readOnly={project.status === "archived"}
                   onOpen={openTask}
                   onMove={() => undefined}
                   onDropOnTask={() => undefined}

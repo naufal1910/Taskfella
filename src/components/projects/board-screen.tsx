@@ -65,6 +65,7 @@ function WorkflowEditor({
   project: ProjectData & { columns: ProjectColumnData[] };
   onSaved: (project: ProjectData) => void;
 }) {
+  const readOnly = project.status === "archived";
   const [open, setOpen] = useState(false);
   const [columns, setColumns] = useState<ProjectColumnData[]>(cloneColumns(project.columns));
   const [saving, setSaving] = useState(false);
@@ -73,12 +74,14 @@ function WorkflowEditor({
   const [newName, setNewName] = useState("");
 
   function update(id: string, patch: Partial<ProjectColumnData>) {
+    if (readOnly) return;
     setColumns((current) =>
       current.map((column) => (column.id === id ? { ...column, ...patch } : column)),
     );
   }
 
   function move(id: string, direction: -1 | 1) {
+    if (readOnly) return;
     setColumns((current) => {
       const index = current.findIndex((column) => column.id === id);
       const target = index + direction;
@@ -90,6 +93,7 @@ function WorkflowEditor({
   }
 
   async function save(confirmCompletionChanges = false) {
+    if (readOnly) return;
     setSaving(true);
     setError(undefined);
     try {
@@ -131,7 +135,7 @@ function WorkflowEditor({
 
   async function addColumn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!newName.trim()) return;
+    if (readOnly || !newName.trim()) return;
     setSaving(true);
     setError(undefined);
     try {
@@ -158,7 +162,7 @@ function WorkflowEditor({
   }
 
   async function deleteColumn(column: ProjectColumnData) {
-    if (!window.confirm(`Delete the empty column “${column.name}”?`)) return;
+    if (readOnly || !window.confirm(`Delete the empty column “${column.name}”?`)) return;
     setSaving(true);
     setError(undefined);
     try {
@@ -184,6 +188,7 @@ function WorkflowEditor({
           setError(undefined);
           setConfirmMeaning(false);
         }}
+        disabled={readOnly}
       >
         Customize workflow
       </Button>
@@ -223,6 +228,7 @@ function WorkflowEditor({
                         value={column.name}
                         onChange={(event) => update(column.id, { name: event.target.value })}
                         maxLength={80}
+                        disabled={readOnly}
                       />
                     </label>
                     <label className="field">
@@ -232,6 +238,7 @@ function WorkflowEditor({
                         onChange={(event) =>
                           update(column.id, { role: event.target.value as Role })
                         }
+                        disabled={readOnly}
                       >
                         {roles.map((role) => (
                           <option value={role.value} key={role.value}>
@@ -251,6 +258,7 @@ function WorkflowEditor({
                             wipLimit: mode === "none" ? null : (column.wipLimit ?? 3),
                           });
                         }}
+                        disabled={readOnly}
                       >
                         {["none", "warn", "enforce"].map((mode) => (
                           <option value={mode} key={mode}>
@@ -270,6 +278,7 @@ function WorkflowEditor({
                           onChange={(event) =>
                             update(column.id, { wipLimit: Number(event.target.value) })
                           }
+                          disabled={readOnly}
                         />
                       </label>
                     )}
@@ -282,6 +291,7 @@ function WorkflowEditor({
                             completedGrouping: event.target.value as "list" | "date",
                           })
                         }
+                        disabled={readOnly}
                       >
                         <option value="list">Plain list</option>
                         <option value="date">Group by date</option>
@@ -293,7 +303,7 @@ function WorkflowEditor({
                       className="text-button"
                       type="button"
                       onClick={() => move(column.id, -1)}
-                      disabled={index === 0}
+                      disabled={readOnly || index === 0}
                     >
                       Move left
                     </button>
@@ -301,7 +311,7 @@ function WorkflowEditor({
                       className="text-button"
                       type="button"
                       onClick={() => move(column.id, 1)}
-                      disabled={index === columns.length - 1}
+                      disabled={readOnly || index === columns.length - 1}
                     >
                       Move right
                     </button>
@@ -309,6 +319,7 @@ function WorkflowEditor({
                       className="text-button text-button--danger"
                       type="button"
                       onClick={() => void deleteColumn(column)}
+                      disabled={readOnly}
                     >
                       Delete empty column
                     </button>
@@ -324,12 +335,13 @@ function WorkflowEditor({
                   value={newName}
                   onChange={(event) => setNewName(event.target.value)}
                   placeholder="e.g. Waiting"
+                  disabled={readOnly}
                 />
               </label>
               <Button
                 variant="secondary"
                 type="submit"
-                disabled={saving || newName.trim().length === 0}
+                disabled={saving || readOnly || newName.trim().length === 0}
               >
                 Add column
               </Button>
@@ -353,7 +365,7 @@ function WorkflowEditor({
                     className="ui-button ui-button--primary"
                     type="button"
                     onClick={() => void save(true)}
-                    disabled={saving}
+                    disabled={saving || readOnly}
                   >
                     {saving ? "Saving…" : "Confirm and save"}
                   </button>
@@ -377,7 +389,7 @@ function WorkflowEditor({
                 className="ui-button ui-button--primary"
                 type="button"
                 onClick={() => void save()}
-                disabled={saving}
+                disabled={saving || readOnly}
               >
                 {saving ? "Saving…" : "Save workflow"}
               </button>
@@ -396,6 +408,7 @@ function ProjectDetailsEditor({
   project: ProjectData;
   onSaved: (project: ProjectData) => void;
 }) {
+  const readOnly = project.status === "archived";
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
@@ -404,6 +417,7 @@ function ProjectDetailsEditor({
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (readOnly) return;
     setSaving(true);
     setError(undefined);
     try {
@@ -430,6 +444,7 @@ function ProjectDetailsEditor({
           setError(undefined);
           setOpen(true);
         }}
+        disabled={readOnly}
       >
         Edit project
       </Button>
@@ -463,6 +478,7 @@ function ProjectDetailsEditor({
                   onChange={(event) => setName(event.target.value)}
                   maxLength={120}
                   required
+                  disabled={readOnly}
                 />
               </label>
               <label className="field" htmlFor="edit-project-description">
@@ -473,6 +489,7 @@ function ProjectDetailsEditor({
                   onChange={(event) => setDescription(event.target.value)}
                   rows={4}
                   maxLength={20000}
+                  disabled={readOnly}
                 />
               </label>
               {error && (
@@ -491,7 +508,7 @@ function ProjectDetailsEditor({
                 <button
                   className="ui-button ui-button--primary"
                   type="submit"
-                  disabled={saving || !name.trim()}
+                  disabled={saving || readOnly || !name.trim()}
                 >
                   {saving ? "Saving…" : "Save details"}
                 </button>
@@ -626,6 +643,7 @@ function BoardExtras({
   project: ProjectData & { swimlanes: SwimlaneData[]; labels: LabelData[] };
   onSaved: (project: ProjectData) => void;
 }) {
+  const readOnly = project.status === "archived";
   const [laneName, setLaneName] = useState("");
   const [labelName, setLabelName] = useState("");
   const [labelColor, setLabelColor] = useState("#0F766E");
@@ -633,7 +651,7 @@ function BoardExtras({
   const [pending, setPending] = useState(false);
 
   async function submit(kind: "swimlanes" | "labels", value: string) {
-    if (!value.trim()) return;
+    if (readOnly || !value.trim()) return;
     setPending(true);
     setError(undefined);
     try {
@@ -665,6 +683,11 @@ function BoardExtras({
           <h2 id="board-foundation-title">Swimlanes and labels</h2>
         </div>
       </div>
+      {readOnly && (
+        <p className="inline-alert" role="status">
+          Archived projects are read-only. Restore this project to change board data.
+        </p>
+      )}
       <div className="foundation-setting-grid">
         <div>
           <h3>Swimlanes</h3>
@@ -690,11 +713,12 @@ function BoardExtras({
               value={laneName}
               onChange={(event) => setLaneName(event.target.value)}
               placeholder="New swimlane"
+              disabled={readOnly}
             />
             <button
               className="ui-button ui-button--secondary"
               type="submit"
-              disabled={pending || !laneName.trim()}
+              disabled={pending || readOnly || !laneName.trim()}
             >
               Add
             </button>
@@ -726,6 +750,7 @@ function BoardExtras({
               value={labelName}
               onChange={(event) => setLabelName(event.target.value)}
               placeholder="New label"
+              disabled={readOnly}
             />
             <label className="sr-only" htmlFor="new-label-color">
               New label color
@@ -736,11 +761,12 @@ function BoardExtras({
               value={labelColor}
               onChange={(event) => setLabelColor(event.target.value)}
               aria-label="New label color"
+              disabled={readOnly}
             />
             <button
               className="ui-button ui-button--secondary"
               type="submit"
-              disabled={pending || !labelName.trim()}
+              disabled={pending || readOnly || !labelName.trim()}
             >
               Add
             </button>
