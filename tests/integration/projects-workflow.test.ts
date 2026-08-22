@@ -18,9 +18,6 @@ import {
   addColumn,
   archiveProject,
   createLabel,
-  createNote,
-  createSubtask,
-  createTask,
   configureColumns,
   createProject,
   createSwimlane,
@@ -29,11 +26,16 @@ import {
   reorderColumns,
   reorderProjects,
   restoreProject,
-  trashTask,
   updateColumn,
   updateLabel,
   updateSwimlane,
 } from "@/server/modules/projects/service";
+import {
+  createNote,
+  createSubtask,
+  createTask,
+  trashTask,
+} from "@/server/modules/tasks/service";
 import { assertColumnWip } from "@/server/modules/workflow/wip";
 import { DELETE as deleteProjectColumnRoute } from "@/app/api/projects/[projectId]/columns/[columnId]/route";
 import { DELETE as deleteProjectLabelRoute } from "@/app/api/projects/[projectId]/labels/[labelId]/route";

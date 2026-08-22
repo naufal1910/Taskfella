@@ -2,7 +2,7 @@
 
 Taskfella is an open-source, personal-first, board-first workspace for focused execution. It will bring Kanban planning, Pomodoro focus, manual time tracking, and personal analytics into one calm daily workflow.
 
-This repository currently contains **Phase 0, Phase 1A–1E, Phase 2, and the Phase 3 task/board-execution implementation under review: the application, authentication foundation, email/password lifecycle, Google OAuth with explicit identity linking, account settings/appearance behavior, integrated authentication verification, account-owned project/workflow boards, and account-isolated tasks with responsive execution controls**. Phase 3 is not considered delivered until its PR merges. Timers, analytics, and exports remain later-phase behavior.
+This repository currently contains **Phase 0, Phase 1A–1E, Phase 2, and the Phase 3 task/board-execution implementation under review: the application, authentication foundation, email/password lifecycle, Google OAuth with explicit identity linking, account settings/appearance behavior, integrated authentication verification, account-owned project/workflow boards, and account-isolated tasks with responsive execution controls**. Phase 3 is not considered delivered until its PR merges. Focus timers, time tracking, analytics, exports, and collaboration remain later-phase behavior.
 
 ## Quick start
 

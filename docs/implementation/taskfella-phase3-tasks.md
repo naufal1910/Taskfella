@@ -1,6 +1,6 @@
 # Phase 3 tasks and board execution
 
-Phase 3 delivers the account-owned task planning and board-execution slice from [issue #5](https://github.com/naufal1910/Taskfella/issues/5). The issue remains open until the captain-approved PR merges; this record is implementation and verification evidence, not a delivery declaration.
+Phase 3 delivers the account-owned task planning and board-execution slice from [issue #5](https://github.com/naufal1910/Taskfella/issues/5). The future PR for this record must carry `Closes #5`; the issue remains open until the captain-approved PR merges. This record is implementation and verification evidence, not a delivery declaration.
 
 ## Product boundary
 
@@ -18,13 +18,13 @@ Migration `0009_clammy_miss_america.sql` is the only new Phase 3 migration artif
 - composite ownership and parentage constraints for task locations;
 - constrained `task_labels` joins that cannot cross accounts or projects;
 - ordered `subtasks`, chronological `notes`, and retained `task_lifecycle_events`;
-- indexes for board order, due dates, ownership, search-related lookups, and active task positions.
+- indexes for board order, due dates, ownership, lifecycle lookups, and active task positions.
 
 `src/server/modules/tasks/markdown.ts` is the Markdown trust boundary. Storage normalization strips raw HTML/comments, removes images, and turns unsafe URL destinations into plain text. Rendering escapes all user text and only generates the supported headings, emphasis, lists, code, and safe `http`, `https`, `mailto`, relative, and fragment links. No user HTML, event handler, script, `javascript:`, `vbscript:`, or `data:` URL is passed to the browser.
 
 Every task, child record, label join, search/filter query, movement, ordering change, restore, Trash action, and permanent deletion operation is scoped through the authenticated account and validated again in the domain service. Permanent task deletion requires the exact task title and is only available from Trash; ordinary deletion is reversible.
 
-Trash retains notes, subtasks, labels, lifecycle history, and task identity. Restore first attempts the saved column, swimlane, and position; if a parent was removed it falls back to the first non-completed column and no swimlane. Archived projects remain readable but reject task mutations, including restore, until the project is restored. Removing a workflow column or swimlane updates only hidden/current foreign-key locations while retaining restoration metadata.
+Trash retains notes, subtasks, labels, lifecycle history, and task identity. Restore first attempts the saved column, swimlane, and position; if the saved column no longer exists it uses the first non-completed column, and if the saved swimlane no longer exists it uses no swimlane. Archived projects remain readable but reject task mutations, including restore, until the project is restored. Removing a workflow column or swimlane updates only hidden/current foreign-key locations while retaining restoration metadata.
 
 ## API surface
 
@@ -38,7 +38,7 @@ Primary project-scoped routes:
 - `POST /api/projects/:projectId/tasks/:taskId/subtasks` and `PATCH/DELETE .../:subtaskId`
 - `POST /api/projects/:projectId/tasks/:taskId/notes` and `PATCH/DELETE .../:noteId`
 
-Compatibility task routes under `/api/tasks/:taskId` expose the same authenticated service operations. Search and combinable filters are query parameters on the list route: `search`, `labelId`, `color`, `due`, `columnId`, `swimlaneId`, and `trash`. Date-only due filters use the account timezone, not the server's local timezone.
+Compatibility task routes under `/api/tasks` and `/api/tasks/:taskId` expose the same authenticated service operations. Search and combinable filters are query parameters on the list route: `search`, `labelId`, `color`, `due`, `columnId`, `swimlaneId`, and `trash`. Date-only due filters use the account timezone, not the server's local timezone.
 
 ## Executable verification
 

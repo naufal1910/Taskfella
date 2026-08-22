@@ -743,7 +743,6 @@ export function TaskDetails({
         aria-modal="true"
         aria-labelledby="task-detail-title"
         aria-describedby="task-detail-context"
-        aria-readonly={readOnly}
         aria-busy={loading}
       >
         <header className="task-detail-panel__header">
