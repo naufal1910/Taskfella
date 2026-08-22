@@ -21,6 +21,8 @@ import {
   updateSwimlane,
 } from "@/server/modules/projects/service";
 import { assertColumnWip } from "@/server/modules/workflow/wip";
+import { DELETE as deleteProjectLabelRoute } from "@/app/api/projects/[projectId]/labels/[labelId]/route";
+import { DELETE as deleteProjectSwimlaneRoute } from "@/app/api/projects/[projectId]/swimlanes/[swimlaneId]/route";
 import { GET as getProject } from "@/app/api/projects/[projectId]/route";
 import { PATCH as configureWorkflowRoute } from "@/app/api/projects/[projectId]/workflow/route";
 import { GET as listProjectsRoute, POST as createProjectRoute } from "@/app/api/projects/route";
@@ -50,8 +52,17 @@ function mutationWithSession(
   body: unknown,
   method = "POST",
 ): Request {
+  return rawMutationWithSession(session, path, JSON.stringify(body), method);
+}
+
+function rawMutationWithSession(
+  session: string,
+  path: string,
+  body: string | undefined,
+  method = "DELETE",
+): Request {
   const csrf = `csrf-${crypto.randomUUID()}`;
-  return new Request(`http://localhost:3000${path}`, {
+  const init: RequestInit = {
     method,
     headers: {
       origin: "http://localhost:3000",
@@ -59,8 +70,9 @@ function mutationWithSession(
       "x-csrf-token": csrf,
       "content-type": "application/json",
     },
-    body: JSON.stringify(body),
-  });
+  };
+  if (body !== undefined) init.body = body;
+  return new Request(`http://localhost:3000${path}`, init);
 }
 
 integration("Phase 2 projects and workflow transactions", () => {
@@ -127,11 +139,7 @@ integration("Phase 2 projects and workflow transactions", () => {
       mutationWithSession(session.token, "/api/projects", {
         name: "Malformed board",
         template: "blank",
-        columns: [
-          { name: "Ready", role: "active" },
-          null,
-          { name: "Done", role: "completed" },
-        ],
+        columns: [{ name: "Ready", role: "active" }, null, { name: "Done", role: "completed" }],
       }),
     );
     expect(malformedColumns.status).toBe(400);
@@ -222,6 +230,7 @@ integration("Phase 2 projects and workflow transactions", () => {
       name: "Custom board",
       template: "simple",
     });
+    const session = await createSession(db, account.id);
     const active = created.columns.find((column) => column.role === "active");
     const completed = created.columns.find((column) => column.role === "completed");
     const queued = created.columns.find((column) => column.role === "queued");
@@ -332,13 +341,9 @@ integration("Phase 2 projects and workflow transactions", () => {
     expect(reordered.columns[0]?.id).toBe(waiting.id);
 
     const lane = await createSwimlane(db, account.id, created.project.id, "Personal");
-    const secondLane = await createSwimlane(
-      db,
-      account.id,
-      created.project.id,
-      "Later",
-      { expectedRevision: lane.project.revision },
-    );
+    const secondLane = await createSwimlane(db, account.id, created.project.id, "Later", {
+      expectedRevision: lane.project.revision,
+    });
     const movedLane = await updateSwimlane(
       db,
       account.id,
@@ -389,6 +394,46 @@ integration("Phase 2 projects and workflow transactions", () => {
       expectedRevision: movedLabel.project.revision,
     });
     expect(deleted.columns.some((column) => column.id === waiting.id)).toBe(false);
+
+    const labelId = movedLabel.labels[0]!.id;
+    const malformedLabelDelete = await deleteProjectLabelRoute(
+      rawMutationWithSession(
+        session.token,
+        `/api/projects/${created.project.id}/labels/${labelId}`,
+        "{malformed",
+      ),
+      { params: Promise.resolve({ projectId: created.project.id, labelId }) },
+    );
+    expect(malformedLabelDelete.status).toBe(400);
+    const emptyLabelDelete = await deleteProjectLabelRoute(
+      rawMutationWithSession(
+        session.token,
+        `/api/projects/${created.project.id}/labels/${labelId}`,
+        undefined,
+      ),
+      { params: Promise.resolve({ projectId: created.project.id, labelId }) },
+    );
+    expect(emptyLabelDelete.status).toBe(200);
+
+    const swimlaneId = movedLabel.swimlanes[0]!.id;
+    const malformedSwimlaneDelete = await deleteProjectSwimlaneRoute(
+      rawMutationWithSession(
+        session.token,
+        `/api/projects/${created.project.id}/swimlanes/${swimlaneId}`,
+        "{malformed",
+      ),
+      { params: Promise.resolve({ projectId: created.project.id, swimlaneId }) },
+    );
+    expect(malformedSwimlaneDelete.status).toBe(400);
+    const emptySwimlaneDelete = await deleteProjectSwimlaneRoute(
+      rawMutationWithSession(
+        session.token,
+        `/api/projects/${created.project.id}/swimlanes/${swimlaneId}`,
+        undefined,
+      ),
+      { params: Promise.resolve({ projectId: created.project.id, swimlaneId }) },
+    );
+    expect(emptySwimlaneDelete.status).toBe(200);
   });
 
   it("rejects invalid workflow configurations before commit and the database trigger rejects raw invalid writes", async () => {

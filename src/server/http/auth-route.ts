@@ -84,10 +84,25 @@ export function requireAuthCsrf(request: Request, context: AuthRouteContext): vo
   });
 }
 
-export async function parseJsonObject(request: Request): Promise<Record<string, unknown>> {
+async function parseJsonObjectBody(
+  request: Request,
+  allowEmpty: boolean,
+): Promise<Record<string, unknown>> {
+  let text: string;
+  try {
+    text = await request.text();
+  } catch {
+    throw new AppError("INVALID_REQUEST");
+  }
+
+  if (text.trim().length === 0) {
+    if (allowEmpty) return {};
+    throw new AppError("INVALID_REQUEST");
+  }
+
   let value: unknown;
   try {
-    value = await request.json();
+    value = JSON.parse(text);
   } catch {
     throw new AppError("INVALID_REQUEST");
   }
@@ -97,6 +112,14 @@ export async function parseJsonObject(request: Request): Promise<Record<string, 
   }
 
   return value as Record<string, unknown>;
+}
+
+export function parseJsonObject(request: Request): Promise<Record<string, unknown>> {
+  return parseJsonObjectBody(request, false);
+}
+
+export function parseOptionalJsonObject(request: Request): Promise<Record<string, unknown>> {
+  return parseJsonObjectBody(request, true);
 }
 
 export function clientSubject(request: Request, environment: AppEnv): string {

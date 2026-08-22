@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getDatabase } from "@/server/db/client";
 import { protectedRoute, type AuthenticatedAccount } from "@/server/http/authentication";
-import { parseJsonObject } from "@/server/http/auth-route";
+import { parseJsonObject, parseOptionalJsonObject } from "@/server/http/auth-route";
 import { AppError } from "@/server/http/errors";
 import { serializeProject, type ProjectSnapshot } from "@/server/modules/projects/service";
 
@@ -47,4 +47,4 @@ export function projectRoute(
   return protectedRoute(request, handler, { mutation });
 }
 
-export { getDatabase, parseJsonObject };
+export { getDatabase, parseJsonObject, parseOptionalJsonObject };

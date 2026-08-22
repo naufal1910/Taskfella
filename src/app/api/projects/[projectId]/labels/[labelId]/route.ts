@@ -3,6 +3,7 @@ import {
   expectedRevisionFrom,
   getDatabase,
   parseJsonObject,
+  parseOptionalJsonObject,
   projectJson,
   projectRoute,
 } from "@/server/http/project-route";
@@ -33,7 +34,7 @@ export async function DELETE(request: Request, context: Context): Promise<NextRe
   return projectRoute(
     request,
     async ({ account }) => {
-      const body = await parseJsonObject(request).catch(() => ({}) as Record<string, unknown>);
+      const body = await parseOptionalJsonObject(request);
       const project = await deleteLabel(getDatabase(), account.id, projectId, labelId, {
         expectedRevision: expectedRevisionFrom(body),
       });
