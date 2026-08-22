@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  expectedRevisionFrom,
   getDatabase,
   parseJsonObject,
   projectJson,
@@ -18,7 +19,13 @@ export async function PATCH(request: Request, context: Context): Promise<NextRes
     request,
     async ({ account }) => {
       const body = await parseJsonObject(request);
-      const project = await reorderSwimlanes(getDatabase(), account.id, projectId, body.orderedIds);
+      const project = await reorderSwimlanes(
+        getDatabase(),
+        account.id,
+        projectId,
+        body.orderedIds,
+        { expectedRevision: expectedRevisionFrom(body) },
+      );
       return projectJson({ ok: true, project });
     },
     true,

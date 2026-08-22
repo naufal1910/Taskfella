@@ -2133,7 +2133,7 @@ h2 {
 .board-columns {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  grid-template-columns: repeat(var(--board-column-count), minmax(220px, 1fr));
   gap: var(--space-md);
   overflow-x: auto;
   padding-bottom: var(--space-xs);
@@ -2389,7 +2389,7 @@ h2 {
   }
 
   .board-columns {
-    grid-template-columns: repeat(5, minmax(200px, 1fr));
+    grid-template-columns: repeat(var(--board-column-count), minmax(200px, 1fr));
   }
 
   .workflow-row__fields {

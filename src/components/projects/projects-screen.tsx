@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { Button, StatusBadge, Surface } from "@/components/ui/primitives";
+import { FocusDialog } from "./focus-dialog";
 import { apiRequest, type ProjectData } from "./project-api";
 import { ProjectNavigation } from "./project-navigation";
 
@@ -20,7 +21,7 @@ function ProjectCard({
 }: {
   project: ProjectData;
   onChanged: () => void;
-  onMove?: (position: number) => void;
+  onMove?: (direction: -1 | 1) => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
 }) {
@@ -117,7 +118,7 @@ function ProjectCard({
             <button
               className="text-button"
               type="button"
-              onClick={() => onMove(Math.max(0, project.position - 1))}
+              onClick={() => onMove(-1)}
               disabled={pending || !canMoveUp}
             >
               Move up
@@ -125,7 +126,7 @@ function ProjectCard({
             <button
               className="text-button"
               type="button"
-              onClick={() => onMove(project.position + 1)}
+              onClick={() => onMove(1)}
               disabled={pending || !canMoveDown}
             >
               Move down
@@ -150,11 +151,10 @@ function ProjectCard({
         </p>
       )}
       {deleteOpen && (
-        <div
+        <FocusDialog
           className="destructive-confirm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={`delete-${project.id}-title`}
+          labelledBy={`delete-${project.id}-title`}
+          onClose={() => setDeleteOpen(false)}
         >
           <h4 id={`delete-${project.id}-title`}>Delete “{project.name}” permanently?</h4>
           <p>
@@ -187,7 +187,7 @@ function ProjectCard({
               Permanently delete
             </button>
           </div>
-        </div>
+        </FocusDialog>
       )}
     </article>
   );
@@ -331,7 +331,7 @@ export function ProjectsScreen() {
                       key={project.id}
                       project={project}
                       onChanged={() => void loadProjects()}
-                      onMove={(position) => void reorderProject(project, position)}
+                      onMove={(direction) => void reorderProject(project, index + direction)}
                       canMoveUp={index > 0}
                       canMoveDown={index < active.length - 1}
                     />
@@ -370,11 +370,10 @@ export function ProjectsScreen() {
       </main>
       {createOpen && (
         <div className="modal-backdrop" role="presentation">
-          <section
+          <FocusDialog
             className="product-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-project-title"
+            labelledBy="create-project-title"
+            onClose={() => setCreateOpen(false)}
           >
             <div className="dialog-heading">
               <div>
@@ -484,7 +483,7 @@ export function ProjectsScreen() {
                 </button>
               </div>
             </form>
-          </section>
+          </FocusDialog>
         </div>
       )}
     </div>

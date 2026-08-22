@@ -12,6 +12,7 @@ const links = [
 
 export function ProjectNavigation({ projectName }: { projectName?: string }) {
   const pathname = usePathname();
+  const projectsActive = pathname === "/projects" || pathname.startsWith("/projects/");
   return (
     <>
       <aside className="product-sidebar" aria-label="Workspace navigation">
@@ -21,9 +22,9 @@ export function ProjectNavigation({ projectName }: { projectName?: string }) {
         </Link>
         <nav className="product-sidebar__nav" aria-label="Primary navigation">
           <Link
-            className={`product-nav-link ${pathname === "/projects" ? "active" : ""}`}
+            className={`product-nav-link ${projectsActive ? "active" : ""}`}
             href="/projects"
-            aria-current={pathname === "/projects" ? "page" : undefined}
+            aria-current={projectsActive ? "page" : undefined}
           >
             <span aria-hidden="true">▦</span>
             <span>Projects</span>
@@ -53,7 +54,7 @@ export function ProjectNavigation({ projectName }: { projectName?: string }) {
       <nav className="product-bottom-nav" aria-label="Mobile navigation">
         {links.map((link) => {
           const active =
-            link.href === "/projects" ? pathname === "/projects" : pathname.startsWith(link.href);
+            link.href === "/projects" ? projectsActive : pathname.startsWith(link.href);
           return (
             <Link
               className={active ? "active" : ""}

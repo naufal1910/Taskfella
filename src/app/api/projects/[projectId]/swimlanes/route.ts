@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  expectedRevisionFrom,
   getDatabase,
   parseJsonObject,
   projectJson,
@@ -18,7 +19,9 @@ export async function POST(request: Request, context: Context): Promise<NextResp
     request,
     async ({ account }) => {
       const body = await parseJsonObject(request);
-      const project = await createSwimlane(getDatabase(), account.id, projectId, body.name);
+      const project = await createSwimlane(getDatabase(), account.id, projectId, body.name, {
+        expectedRevision: expectedRevisionFrom(body),
+      });
       return projectJson({ ok: true, project }, 201);
     },
     true,

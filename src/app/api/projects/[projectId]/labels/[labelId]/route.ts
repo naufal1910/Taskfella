@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  expectedRevisionFrom,
   getDatabase,
   parseJsonObject,
   projectJson,
@@ -18,7 +19,9 @@ export async function PATCH(request: Request, context: Context): Promise<NextRes
     request,
     async ({ account }) => {
       const body = await parseJsonObject(request);
-      const project = await updateLabel(getDatabase(), account.id, projectId, labelId, body);
+      const project = await updateLabel(getDatabase(), account.id, projectId, labelId, body, {
+        expectedRevision: expectedRevisionFrom(body),
+      });
       return projectJson({ ok: true, project });
     },
     true,
@@ -30,8 +33,10 @@ export async function DELETE(request: Request, context: Context): Promise<NextRe
   return projectRoute(
     request,
     async ({ account }) => {
-      await parseJsonObject(request).catch(() => ({}));
-      const project = await deleteLabel(getDatabase(), account.id, projectId, labelId);
+      const body = await parseJsonObject(request).catch(() => ({}) as Record<string, unknown>);
+      const project = await deleteLabel(getDatabase(), account.id, projectId, labelId, {
+        expectedRevision: expectedRevisionFrom(body),
+      });
       return projectJson({ ok: true, project });
     },
     true,

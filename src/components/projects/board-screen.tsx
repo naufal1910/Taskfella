@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type FormEvent, useEffect, useMemo, useState } from "react";
 import { Button, StatusBadge, Surface } from "@/components/ui/primitives";
 import {
   apiRequest,
@@ -11,6 +11,7 @@ import {
   type ProjectData,
   type SwimlaneData,
 } from "./project-api";
+import { FocusDialog } from "./focus-dialog";
 import { ProjectNavigation } from "./project-navigation";
 
 type ProjectResponse = {
@@ -46,13 +47,13 @@ function WipBadge({ column }: { column: ProjectColumnData }) {
   );
 }
 
-function BoardColumn({ column }: { column: ProjectColumnData }) {
+function BoardColumn({ column, headingId }: { column: ProjectColumnData; headingId: string }) {
   return (
-    <article className="board-column" aria-labelledby={`column-${column.id}`}>
+    <article className="board-column" aria-labelledby={headingId}>
       <header className="board-column__header">
         <div>
           <p className="column-role">{column.role}</p>
-          <h3 id={`column-${column.id}`}>{column.name}</h3>
+          <h3 id={headingId}>{column.name}</h3>
         </div>
         <span className="column-count" aria-label="No tasks">
           0
@@ -198,11 +199,10 @@ function WorkflowEditor({
       </Button>
       {open && (
         <div className="modal-backdrop" role="presentation">
-          <section
+          <FocusDialog
             className="product-dialog product-dialog--wide"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="workflow-dialog-title"
+            labelledBy="workflow-dialog-title"
+            onClose={() => setOpen(false)}
           >
             <div className="dialog-heading">
               <div>
@@ -392,7 +392,7 @@ function WorkflowEditor({
                 {saving ? "Saving…" : "Save workflow"}
               </button>
             </div>
-          </section>
+          </FocusDialog>
         </div>
       )}
     </>
@@ -445,11 +445,10 @@ function ProjectDetailsEditor({
       </Button>
       {open && (
         <div className="modal-backdrop" role="presentation">
-          <section
+          <FocusDialog
             className="product-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="project-details-title"
+            labelledBy="project-details-title"
+            onClose={() => setOpen(false)}
           >
             <div className="dialog-heading">
               <div>
@@ -508,7 +507,7 @@ function ProjectDetailsEditor({
                 </button>
               </div>
             </form>
-          </section>
+          </FocusDialog>
         </div>
       )}
     </>
@@ -586,11 +585,10 @@ function BoardLifecycle({
         </p>
       )}
       {deleteOpen && (
-        <div
+        <FocusDialog
           className="destructive-confirm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="board-delete-title"
+          labelledBy="board-delete-title"
+          onClose={() => setDeleteOpen(false)}
         >
           <h2 id="board-delete-title">Permanently delete this project?</h2>
           <p>
@@ -623,7 +621,7 @@ function BoardLifecycle({
               Permanently delete
             </button>
           </div>
-        </div>
+        </FocusDialog>
       )}
     </div>
   );
@@ -648,7 +646,7 @@ function BoardExtras({
     try {
       const response = await apiRequest<ProjectResponse>(`/api/projects/${project.id}/${kind}`, {
         method: "POST",
-        body: JSON.stringify({ name: value }),
+        body: JSON.stringify({ name: value, expectedRevision: project.revision }),
       });
       onSaved(response.project);
       if (kind === "swimlanes") setLaneName("");
@@ -895,14 +893,21 @@ export function BoardScreen({ projectId }: { projectId: string }) {
           </label>
         </div>
         <section className="board-surface" aria-label="Workflow board">
-          <div className="board-columns board-columns--desktop">
+          <div
+            className="board-columns board-columns--desktop"
+            style={{ "--board-column-count": project.columns.length } as CSSProperties}
+          >
             {project.columns.map((column) => (
-              <BoardColumn key={column.id} column={column} />
+              <BoardColumn
+                key={column.id}
+                column={column}
+                headingId={`desktop-column-${column.id}`}
+              />
             ))}
           </div>
           <div className="board-column board-column--mobile">
             {selected ? (
-              <BoardColumn column={selected} />
+              <BoardColumn column={selected} headingId={`mobile-column-${selected.id}`} />
             ) : (
               <p>No workflow columns are available.</p>
             )}

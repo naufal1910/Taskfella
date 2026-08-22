@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  expectedRevisionFrom,
   getDatabase,
   parseJsonObject,
   projectJson,
@@ -32,7 +33,9 @@ export async function PATCH(request: Request, context: Context): Promise<NextRes
           { error: { code: "INVALID_REQUEST", message: "The request could not be processed." } },
           400,
         );
-      const project = await updateSwimlane(getDatabase(), account.id, projectId, swimlaneId, body);
+      const project = await updateSwimlane(getDatabase(), account.id, projectId, swimlaneId, body, {
+        expectedRevision: expectedRevisionFrom(body),
+      });
       return projectJson({ ok: true, project });
     },
     true,
@@ -51,7 +54,9 @@ export async function DELETE(request: Request, context: Context): Promise<NextRe
           { error: { code: "INVALID_REQUEST", message: "The request could not be processed." } },
           400,
         );
-      const project = await deleteSwimlane(getDatabase(), account.id, projectId, swimlaneId);
+      const project = await deleteSwimlane(getDatabase(), account.id, projectId, swimlaneId, {
+        expectedRevision: expectedRevisionFrom(body),
+      });
       return projectJson({ ok: true, project });
     },
     true,
@@ -70,7 +75,13 @@ export async function POST(request: Request, context: Context): Promise<NextResp
           { error: { code: "INVALID_REQUEST", message: "The request could not be processed." } },
           400,
         );
-      const project = await reorderSwimlanes(getDatabase(), account.id, projectId, body.orderedIds);
+      const project = await reorderSwimlanes(
+        getDatabase(),
+        account.id,
+        projectId,
+        body.orderedIds,
+        { expectedRevision: expectedRevisionFrom(body) },
+      );
       return projectJson({ ok: true, project });
     },
     true,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  expectedRevisionFrom,
   getDatabase,
   parseJsonObject,
   projectJson,
@@ -18,10 +19,13 @@ export async function POST(request: Request, context: Context): Promise<NextResp
     request,
     async ({ account }) => {
       const body = await parseJsonObject(request);
-      const project = await createLabel(getDatabase(), account.id, projectId, {
-        name: body.name,
-        color: body.color,
-      });
+      const project = await createLabel(
+        getDatabase(),
+        account.id,
+        projectId,
+        { name: body.name, color: body.color },
+        { expectedRevision: expectedRevisionFrom(body) },
+      );
       return projectJson({ ok: true, project }, 201);
     },
     true,

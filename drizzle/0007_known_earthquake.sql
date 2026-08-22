@@ -100,23 +100,29 @@ DECLARE
   active_count integer;
   completed_count integer;
 BEGIN
-  project_key := COALESCE(NEW.project_id, OLD.project_id);
-  IF NOT EXISTS (SELECT 1 FROM "projects" WHERE "id" = project_key) THEN
-    RETURN NULL;
-  END IF;
+  FOR project_key IN
+    SELECT DISTINCT changed.project_id
+    FROM unnest(ARRAY[NEW.project_id, OLD.project_id]) AS changed(project_id)
+    WHERE changed.project_id IS NOT NULL
+    ORDER BY changed.project_id
+  LOOP
+    IF NOT EXISTS (SELECT 1 FROM "projects" WHERE "id" = project_key) THEN
+      CONTINUE;
+    END IF;
 
-  PERFORM 1 FROM "projects" WHERE "id" = project_key FOR UPDATE;
-  SELECT
-    count(*) FILTER (WHERE "role" = 'active'),
-    count(*) FILTER (WHERE "role" = 'completed')
-  INTO active_count, completed_count
-  FROM "columns"
-  WHERE "project_id" = project_key;
+    PERFORM 1 FROM "projects" WHERE "id" = project_key FOR UPDATE;
+    SELECT
+      count(*) FILTER (WHERE "role" = 'active'),
+      count(*) FILTER (WHERE "role" = 'completed')
+    INTO active_count, completed_count
+    FROM "columns"
+    WHERE "project_id" = project_key;
 
-  IF active_count <> 1 OR completed_count < 1 THEN
-    RAISE EXCEPTION 'Project workflow must have exactly one active column and at least one completed column'
-      USING ERRCODE = '23514', CONSTRAINT = 'columns_workflow_invariant_check';
-  END IF;
+    IF active_count <> 1 OR completed_count < 1 THEN
+      RAISE EXCEPTION 'Project workflow must have exactly one active column and at least one completed column'
+        USING ERRCODE = '23514', CONSTRAINT = 'columns_workflow_invariant_check';
+    END IF;
+  END LOOP;
   RETURN NULL;
 END;
 $$;--> statement-breakpoint

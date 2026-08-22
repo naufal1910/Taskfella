@@ -17,9 +17,11 @@ import {
   reorderProjects,
   restoreProject,
   updateColumn,
+  updateSwimlane,
 } from "@/server/modules/projects/service";
 import { assertColumnWip } from "@/server/modules/workflow/wip";
 import { GET as getProject } from "@/app/api/projects/[projectId]/route";
+import { PATCH as configureWorkflowRoute } from "@/app/api/projects/[projectId]/workflow/route";
 import { GET as listProjectsRoute, POST as createProjectRoute } from "@/app/api/projects/route";
 
 const integration = process.env.DATABASE_URL ? describe : describe.skip;
@@ -41,10 +43,15 @@ function requestWithSession(session: string, path: string): Request {
   });
 }
 
-function mutationWithSession(session: string, path: string, body: unknown): Request {
+function mutationWithSession(
+  session: string,
+  path: string,
+  body: unknown,
+  method = "POST",
+): Request {
   const csrf = `csrf-${crypto.randomUUID()}`;
   return new Request(`http://localhost:3000${path}`, {
-    method: "POST",
+    method,
     headers: {
       origin: "http://localhost:3000",
       cookie: `taskfella_session=${session}; taskfella_csrf=${csrf}`,
@@ -120,6 +127,36 @@ integration("Phase 2 projects and workflow transactions", () => {
     expect(await listed.json()).toMatchObject({
       projects: [{ name: "Route board", columnCount: 2 }],
     });
+    const createdProject = createdBody.project as {
+      id: string;
+      revision: number;
+      columns: Array<Record<string, unknown>>;
+    };
+    const renamed = await configureWorkflowRoute(
+      mutationWithSession(
+        session.token,
+        `/api/projects/${createdProject.id}/workflow`,
+        {
+          expectedRevision: createdProject.revision,
+          columns: createdProject.columns.map((column, position) => ({
+            ...column,
+            name: position === 0 ? "Ready" : column.name,
+            position,
+          })),
+        },
+        "PATCH",
+      ),
+      { params: Promise.resolve({ projectId: createdProject.id }) },
+    );
+    expect(renamed.status).toBe(200);
+    expect((await renamed.json()).project.columns[0].name).toBe("Ready");
+
+    const invalidProject = await getProject(
+      requestWithSession(session.token, "/api/projects/not-a-uuid"),
+      { params: Promise.resolve({ projectId: "not-a-uuid" }) },
+    );
+    expect(invalidProject.status).toBe(400);
+    expect(await invalidProject.json()).toMatchObject({ error: { code: "INVALID_REQUEST" } });
   });
 
   it("scopes reads and project lists to the authenticated account", async () => {
@@ -148,16 +185,18 @@ integration("Phase 2 projects and workflow transactions", () => {
     expect(await response.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
   });
 
-  it("preserves account-owned project ordering", async () => {
+  it("preserves account-owned project ordering across lifecycle changes", async () => {
     if (!db) return;
     const account = await owner("project-order");
     const first = await createProject(db, account.id, { name: "First", template: "blank" });
     const second = await createProject(db, account.id, { name: "Second", template: "blank" });
     const third = await createProject(db, account.id, { name: "Third", template: "blank" });
-    const reordered = await reorderProjects(db, account.id, third.project.id, 0);
-    expect(reordered.map((project) => project.name)).toEqual(["Third", "First", "Second"]);
+    await archiveProject(db, account.id, first.project.id);
+    const fourth = await createProject(db, account.id, { name: "Fourth", template: "blank" });
+    const reordered = await reorderProjects(db, account.id, fourth.project.id, 0);
+    expect(reordered.map((project) => project.name)).toEqual(["Fourth", "Second", "Third"]);
     expect(reordered.map((project) => project.position)).toEqual([0, 1, 2]);
-    expect(first.project.accountId).toBe(account.id);
+    expect(second.project.accountId).toBe(account.id);
   });
 
   it("customizes columns, lanes, labels, WIP, and ordering without breaking invariants", async () => {
@@ -188,11 +227,39 @@ integration("Phase 2 projects and workflow transactions", () => {
       wipLimit: 3,
     });
     await expect(
-      assertColumnWip(db, account.id, created.project.id, active.id, async () => 3),
+      assertColumnWip(
+        db,
+        account.id,
+        created.project.id,
+        active.id,
+        async () => 3,
+        async (_tx, evaluation) => evaluation,
+      ),
     ).rejects.toMatchObject({ code: "WIP_CONFIRMATION_REQUIRED" });
     await expect(
-      assertColumnWip(db, account.id, created.project.id, active.id, async () => 3, true),
+      assertColumnWip(
+        db,
+        account.id,
+        created.project.id,
+        active.id,
+        async () => 3,
+        async (_tx, evaluation) => evaluation,
+        true,
+      ),
     ).resolves.toMatchObject({ allowed: true, warning: true });
+
+    const withoutWip = await updateColumn(
+      db,
+      account.id,
+      created.project.id,
+      active.id,
+      { wipMode: "none", wipLimit: null },
+      { expectedRevision: withWip.project.revision },
+    );
+    expect(withoutWip.columns.find((column) => column.id === active.id)).toMatchObject({
+      wipMode: "none",
+      wipLimit: null,
+    });
 
     await expect(
       updateColumn(
@@ -201,7 +268,7 @@ integration("Phase 2 projects and workflow transactions", () => {
         created.project.id,
         queued.id,
         { role: "completed" },
-        { expectedRevision: withWip.project.revision },
+        { expectedRevision: withoutWip.project.revision },
       ),
     ).rejects.toMatchObject({ code: "WORKFLOW_CONFIRMATION_REQUIRED" });
     const roleChanged = await updateColumn(
@@ -210,7 +277,7 @@ integration("Phase 2 projects and workflow transactions", () => {
       created.project.id,
       queued.id,
       { role: "review" },
-      { expectedRevision: withWip.project.revision },
+      { expectedRevision: withoutWip.project.revision },
     );
     expect(roleChanged.columns.filter((column) => column.role === "active")).toHaveLength(1);
     expect(roleChanged.columns.filter((column) => column.role === "completed")).toHaveLength(1);
@@ -238,11 +305,24 @@ integration("Phase 2 projects and workflow transactions", () => {
 
     const lane = await createSwimlane(db, account.id, created.project.id, "Personal");
     expect(lane.swimlanes).toHaveLength(1);
-    const withLabel = await createLabel(db, account.id, created.project.id, {
-      name: "Focus",
-      color: "#176B51",
-    });
+    const withLabel = await createLabel(
+      db,
+      account.id,
+      created.project.id,
+      { name: "Focus", color: "#176B51" },
+      { expectedRevision: lane.project.revision },
+    );
     expect(withLabel.labels[0]).toMatchObject({ name: "Focus", color: "#176B51" });
+    await expect(
+      updateSwimlane(
+        db,
+        account.id,
+        created.project.id,
+        lane.swimlanes[0]!.id,
+        { name: "Stale" },
+        { expectedRevision: lane.project.revision },
+      ),
+    ).rejects.toMatchObject({ code: "CONCURRENT_UPDATE" });
 
     const deleted = await deleteColumn(db, account.id, created.project.id, waiting.id, {
       expectedRevision: withLabel.project.revision,
@@ -288,6 +368,19 @@ integration("Phase 2 projects and workflow transactions", () => {
         expectedRevision: snapshot.project.revision,
       }),
     ).rejects.toMatchObject({ code: "BOARD_INVARIANT_VIOLATION" });
+
+    const reassignmentTarget = await createProject(db, account.id, {
+      name: "Reassignment target",
+      template: "blank",
+    });
+    await expect(
+      db.transaction(async (tx) => {
+        await tx
+          .update(columns)
+          .set({ projectId: reassignmentTarget.project.id })
+          .where(eq(columns.id, completed.id));
+      }),
+    ).rejects.toThrow(/exactly one active column and at least one completed column/);
 
     await expect(
       db.transaction(async (tx) => {

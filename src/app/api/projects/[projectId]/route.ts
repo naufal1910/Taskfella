@@ -6,7 +6,7 @@ import {
   projectRoute,
 } from "@/server/http/project-route";
 import {
-  getProjectSnapshot,
+  getConsistentProjectSnapshot,
   permanentlyDeleteProject,
   updateProject,
 } from "@/server/modules/projects/service";
@@ -20,7 +20,7 @@ type Context = { params: Promise<{ projectId: string }> };
 export async function GET(request: Request, context: Context): Promise<NextResponse> {
   const { projectId } = await context.params;
   return projectRoute(request, async ({ account }) => {
-    const project = await getProjectSnapshot(getDatabase(), account.id, projectId);
+    const project = await getConsistentProjectSnapshot(getDatabase(), account.id, projectId);
     return projectJson({ ok: true, project });
   });
 }

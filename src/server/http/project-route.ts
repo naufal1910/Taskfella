@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDatabase } from "@/server/db/client";
 import { protectedRoute, type AuthenticatedAccount } from "@/server/http/authentication";
 import { parseJsonObject } from "@/server/http/auth-route";
+import { AppError } from "@/server/http/errors";
 import { serializeProject, type ProjectSnapshot } from "@/server/modules/projects/service";
 
 function serializeProjectBody(body: unknown): unknown {
@@ -23,6 +24,19 @@ export function projectJson(body: unknown, status = 200): NextResponse {
     status,
     headers: { "cache-control": "no-store" },
   });
+}
+
+export function expectedRevisionFrom(body: Record<string, unknown>): number | undefined {
+  const expectedRevision = body.expectedRevision;
+  if (
+    expectedRevision !== undefined &&
+    (typeof expectedRevision !== "number" ||
+      !Number.isInteger(expectedRevision) ||
+      expectedRevision < 0)
+  ) {
+    throw new AppError("INVALID_REQUEST");
+  }
+  return expectedRevision;
 }
 
 export function projectRoute(

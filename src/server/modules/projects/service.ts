@@ -27,6 +27,7 @@ import {
   normalizeProjectTemplate,
   normalizeRole,
   normalizeSwimlaneName,
+  normalizeUuid,
   normalizeWipLimit,
   normalizeWipMode,
   normalizedLabelName,
@@ -67,6 +68,10 @@ export interface ColumnConfigurationOptions {
   confirmCompletionChanges?: boolean;
 }
 
+export interface BoardMutationOptions {
+  expectedRevision?: number;
+}
+
 export interface SwimlanePatch {
   name?: unknown;
   position?: unknown;
@@ -95,18 +100,40 @@ async function lockAccountOrder(db: ProjectDatabase, accountId: string): Promise
   );
 }
 
+async function normalizeActiveProjectPositions(
+  db: ProjectDatabase,
+  accountId: string,
+  now: Date,
+): Promise<void> {
+  const activeProjects = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.accountId, accountId), eq(projects.status, "active")))
+    .orderBy(asc(projects.position), asc(projects.createdAt))
+    .for("update");
+  for (const [position, project] of activeProjects.entries()) {
+    if (project.position !== position) {
+      await db
+        .update(projects)
+        .set({ position, updatedAt: now })
+        .where(eq(projects.id, project.id));
+    }
+  }
+}
+
 async function lockProjectRow(
   db: ProjectDatabase,
   accountId: string,
   projectId: string,
 ): Promise<Project> {
+  const normalizedProjectId = normalizeUuid(projectId);
   await db.execute(
-    sql`SELECT pg_advisory_xact_lock(hashtext(${`taskfella-workflow:${projectId}`}))`,
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`taskfella-workflow:${normalizedProjectId}`}))`,
   );
   const [project] = await db
     .select()
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.accountId, accountId)))
+    .where(and(eq(projects.id, normalizedProjectId), eq(projects.accountId, accountId)))
     .for("update");
   if (!project) throw new AppError("NOT_FOUND");
   return project;
@@ -117,10 +144,11 @@ async function getOwnedProject(
   accountId: string,
   projectId: string,
 ): Promise<Project> {
+  const normalizedProjectId = normalizeUuid(projectId);
   const [project] = await db
     .select()
     .from(projects)
-    .where(and(eq(projects.id, projectId), eq(projects.accountId, accountId)))
+    .where(and(eq(projects.id, normalizedProjectId), eq(projects.accountId, accountId)))
     .limit(1);
   if (!project) throw new AppError("NOT_FOUND");
   return project;
@@ -173,32 +201,33 @@ export function serializeProject(snapshot: ProjectSnapshot) {
   return projectPayload(snapshot);
 }
 
-export async function getProjectSnapshot(
+async function getProjectSnapshot(
   db: ProjectDatabase,
   accountId: string,
   projectId: string,
 ): Promise<ProjectSnapshot> {
-  const project = await getOwnedProject(db, accountId, projectId);
+  const normalizedProjectId = normalizeUuid(projectId);
+  const project = await getOwnedProject(db, accountId, normalizedProjectId);
   const [projectColumns, projectSwimlanes, projectLabels, lifecycle] = await Promise.all([
     db
       .select()
       .from(columns)
-      .where(eq(columns.projectId, projectId))
+      .where(eq(columns.projectId, normalizedProjectId))
       .orderBy(asc(columns.position), asc(columns.createdAt)),
     db
       .select()
       .from(swimlanes)
-      .where(eq(swimlanes.projectId, projectId))
+      .where(eq(swimlanes.projectId, normalizedProjectId))
       .orderBy(asc(swimlanes.position), asc(swimlanes.createdAt)),
     db
       .select()
       .from(labels)
-      .where(eq(labels.projectId, projectId))
+      .where(eq(labels.projectId, normalizedProjectId))
       .orderBy(asc(labels.position), asc(labels.createdAt)),
     db
       .select()
       .from(projectLifecycleEvents)
-      .where(eq(projectLifecycleEvents.projectId, projectId))
+      .where(eq(projectLifecycleEvents.projectId, normalizedProjectId))
       .orderBy(asc(projectLifecycleEvents.createdAt)),
   ]);
   return {
@@ -208,6 +237,17 @@ export async function getProjectSnapshot(
     labels: projectLabels,
     lifecycle,
   };
+}
+
+export async function getConsistentProjectSnapshot(
+  db: Database,
+  accountId: string,
+  projectId: string,
+): Promise<ProjectSnapshot> {
+  return db.transaction((tx) => getProjectSnapshot(tx, accountId, projectId), {
+    isolationLevel: "repeatable read",
+    accessMode: "read only",
+  });
 }
 
 export async function listProjects(db: ProjectDatabase, accountId: string): Promise<Project[]> {
@@ -231,10 +271,11 @@ export async function createProject(
 
   return db.transaction(async (tx) => {
     await lockAccountOrder(tx, accountId);
+    await normalizeActiveProjectPositions(tx, accountId, now);
     const [lastProject] = await tx
       .select({ position: projects.position })
       .from(projects)
-      .where(eq(projects.accountId, accountId))
+      .where(and(eq(projects.accountId, accountId), eq(projects.status, "active")))
       .orderBy(desc(projects.position))
       .limit(1);
     const [project] = await tx
@@ -302,7 +343,7 @@ export async function updateProject(
         revision: sql`${projects.revision} + 1`,
         updatedAt: now,
       })
-      .where(eq(projects.id, projectId))
+      .where(eq(projects.id, project.id))
       .returning();
     if (!updated) throw new Error("Project could not be updated.");
     return getProjectSnapshot(tx, accountId, projectId);
@@ -315,6 +356,7 @@ export async function reorderProjects(
   projectId: string,
   rawPosition: unknown,
 ): Promise<Project[]> {
+  const normalizedProjectId = normalizeUuid(projectId);
   const position = normalizePosition(rawPosition, 0);
   return db.transaction(async (tx) => {
     await lockAccountOrder(tx, accountId);
@@ -324,7 +366,7 @@ export async function reorderProjects(
       .where(and(eq(projects.accountId, accountId), eq(projects.status, "active")))
       .orderBy(asc(projects.position), asc(projects.createdAt))
       .for("update");
-    const currentIndex = ordered.findIndex((project) => project.id === projectId);
+    const currentIndex = ordered.findIndex((project) => project.id === normalizedProjectId);
     if (currentIndex < 0) throw new AppError("NOT_FOUND");
     const targetIndex = Math.min(position, ordered.length - 1);
     const [moved] = ordered.splice(currentIndex, 1);
@@ -348,6 +390,7 @@ export async function archiveProject(
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
+    await lockAccountOrder(tx, accountId);
     const project = await lockProjectRow(tx, accountId, projectId);
     if (project.status === "active") {
       await tx
@@ -358,15 +401,16 @@ export async function archiveProject(
           revision: sql`${projects.revision} + 1`,
           updatedAt: now,
         })
-        .where(eq(projects.id, projectId));
+        .where(eq(projects.id, project.id));
       await tx.insert(projectLifecycleEvents).values({
-        projectId,
+        projectId: project.id,
         accountId,
         event: "archived",
         createdAt: now,
       });
     }
-    return getProjectSnapshot(tx, accountId, projectId);
+    await normalizeActiveProjectPositions(tx, accountId, now);
+    return getProjectSnapshot(tx, accountId, project.id);
   });
 }
 
@@ -379,6 +423,7 @@ export async function restoreProject(
   return db.transaction(async (tx) => {
     await lockAccountOrder(tx, accountId);
     const project = await lockProjectRow(tx, accountId, projectId);
+    await normalizeActiveProjectPositions(tx, accountId, now);
     if (project.status === "archived") {
       const [lastActive] = await tx
         .select({ position: projects.position })
@@ -395,9 +440,9 @@ export async function restoreProject(
           revision: sql`${projects.revision} + 1`,
           updatedAt: now,
         })
-        .where(eq(projects.id, projectId));
+        .where(eq(projects.id, project.id));
       await tx.insert(projectLifecycleEvents).values({
-        projectId,
+        projectId: project.id,
         accountId,
         event: "restored",
         createdAt: now,
@@ -417,11 +462,13 @@ export async function permanentlyDeleteProject(
     throw new AppError("PERMANENT_DELETE_CONFIRMATION_REQUIRED");
   }
   await db.transaction(async (tx) => {
+    await lockAccountOrder(tx, accountId);
     const project = await lockProjectRow(tx, accountId, projectId);
     if (confirmation !== project.name) {
       throw new AppError("PERMANENT_DELETE_CONFIRMATION_REQUIRED");
     }
-    await tx.delete(projects).where(eq(projects.id, projectId));
+    await tx.delete(projects).where(eq(projects.id, project.id));
+    await normalizeActiveProjectPositions(tx, accountId, new Date());
   });
 }
 
@@ -438,9 +485,12 @@ function draftFromColumn(
     role,
     position,
     wipMode,
-    wipLimit: normalizeWipLimit(patch.wipLimit ?? column.wipLimit, wipMode),
+    wipLimit: normalizeWipLimit(
+      patch.wipLimit === undefined ? column.wipLimit : patch.wipLimit,
+      wipMode,
+    ),
     completedGrouping: normalizeCompletedGrouping(
-      patch.completedGrouping ?? column.completedGrouping,
+      patch.completedGrouping === undefined ? column.completedGrouping : patch.completedGrouping,
       column.completedGrouping as CompletedGrouping,
     ),
   };
@@ -456,7 +506,7 @@ async function applyColumnDrafts(
 ): Promise<ProjectSnapshot> {
   const normalized = validateColumnDrafts(drafts).map((draft) => {
     if (!draft.id) throw new AppError("CONCURRENT_UPDATE");
-    return { ...draft, id: draft.id };
+    return { ...draft, id: normalizeUuid(draft.id) };
   });
   const current = await tx
     .select()
@@ -597,15 +647,20 @@ export async function updateColumn(
       .where(eq(columns.projectId, projectId))
       .orderBy(asc(columns.position), asc(columns.createdAt))
       .for("update");
-    const targetColumn = current.find((column) => column.id === columnId);
+    const normalizedColumnId = normalizeUuid(columnId);
+    const targetColumn = current.find((column) => column.id === normalizedColumnId);
     if (!targetColumn) throw new AppError("NOT_FOUND");
     const requestedRole = patch.role === undefined ? undefined : normalizeRole(patch.role);
     const target = current.map((column, index) => {
       const next =
-        column.id === columnId
+        column.id === normalizedColumnId
           ? draftFromColumn(column, patch, index)
           : draftFromColumn(column, {}, index);
-      if (requestedRole === "active" && column.id !== columnId && column.role === "active") {
+      if (
+        requestedRole === "active" &&
+        column.id !== normalizedColumnId &&
+        column.role === "active"
+      ) {
         next.role = "neutral";
       }
       return next;
@@ -630,6 +685,7 @@ export async function reorderColumns(
   ) {
     throw new AppError("INVALID_REQUEST");
   }
+  const normalizedColumnIds = orderedColumnIds.map((id) => normalizeUuid(id));
   return db.transaction(async (tx) => {
     const project = await lockProjectRow(tx, accountId, projectId);
     assertRevision(options.expectedRevision, project.revision);
@@ -640,14 +696,14 @@ export async function reorderColumns(
       .orderBy(asc(columns.position), asc(columns.createdAt))
       .for("update");
     if (
-      current.length !== orderedColumnIds.length ||
-      new Set(orderedColumnIds).size !== current.length ||
-      current.some((column) => !orderedColumnIds.includes(column.id))
+      current.length !== normalizedColumnIds.length ||
+      new Set(normalizedColumnIds).size !== current.length ||
+      current.some((column) => !normalizedColumnIds.includes(column.id))
     ) {
       throw new AppError("CONCURRENT_UPDATE");
     }
     const byId = new Map(current.map((column) => [column.id, column]));
-    const target = (orderedColumnIds as string[]).map((id, position) =>
+    const target = normalizedColumnIds.map((id, position) =>
       draftFromColumn(byId.get(id)!, {}, position),
     );
     return applyColumnDrafts(tx, accountId, project, target, options, now);
@@ -671,12 +727,15 @@ export async function deleteColumn(
       .where(eq(columns.projectId, projectId))
       .orderBy(asc(columns.position), asc(columns.createdAt))
       .for("update");
-    const targetColumn = current.find((column) => column.id === columnId);
+    const normalizedColumnId = normalizeUuid(columnId);
+    const targetColumn = current.find((column) => column.id === normalizedColumnId);
     if (!targetColumn) throw new AppError("NOT_FOUND");
-    const remaining = current.filter((column) => column.id !== columnId);
+    const remaining = current.filter((column) => column.id !== normalizedColumnId);
     const target = remaining.map((column, position) => draftFromColumn(column, {}, position));
     validateColumnDrafts(target);
-    await tx.delete(columns).where(and(eq(columns.id, columnId), eq(columns.projectId, projectId)));
+    await tx
+      .delete(columns)
+      .where(and(eq(columns.id, normalizedColumnId), eq(columns.projectId, projectId)));
     await applyColumnDrafts(tx, accountId, project, target, options, now);
     return getProjectSnapshot(tx, accountId, projectId);
   });
@@ -687,11 +746,13 @@ export async function createSwimlane(
   accountId: string,
   projectId: string,
   rawName: unknown,
+  options: BoardMutationOptions = {},
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   const name = normalizeSwimlaneName(rawName);
   return db.transaction(async (tx) => {
     const project = await lockProjectRow(tx, accountId, projectId);
+    assertRevision(options.expectedRevision, project.revision);
     const [last] = await tx
       .select({ position: swimlanes.position })
       .from(swimlanes)
@@ -724,17 +785,20 @@ export async function updateSwimlane(
   projectId: string,
   swimlaneId: string,
   patch: SwimlanePatch,
+  options: BoardMutationOptions = {},
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
     const project = await lockProjectRow(tx, accountId, projectId);
+    assertRevision(options.expectedRevision, project.revision);
+    const normalizedSwimlaneId = normalizeUuid(swimlaneId);
     const current = await tx
       .select()
       .from(swimlanes)
       .where(eq(swimlanes.projectId, projectId))
       .orderBy(asc(swimlanes.position), asc(swimlanes.createdAt))
       .for("update");
-    const row = current.find((lane) => lane.id === swimlaneId);
+    const row = current.find((lane) => lane.id === normalizedSwimlaneId);
     if (!row) throw new AppError("NOT_FOUND");
     const name = patch.name === undefined ? row.name : normalizeSwimlaneName(patch.name);
     const position = normalizePosition(patch.position, row.position);
@@ -742,7 +806,7 @@ export async function updateSwimlane(
     await tx
       .update(swimlanes)
       .set({ name, position, updatedAt: now })
-      .where(and(eq(swimlanes.id, swimlaneId), eq(swimlanes.projectId, projectId)));
+      .where(and(eq(swimlanes.id, normalizedSwimlaneId), eq(swimlanes.projectId, projectId)));
     await tx
       .update(projects)
       .set({ revision: sql`${projects.revision} + 1`, updatedAt: now })
@@ -756,13 +820,16 @@ export async function reorderSwimlanes(
   accountId: string,
   projectId: string,
   orderedIds: unknown,
+  options: BoardMutationOptions = {},
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   if (!Array.isArray(orderedIds) || orderedIds.some((id) => typeof id !== "string")) {
     throw new AppError("INVALID_REQUEST");
   }
+  const normalizedIds = orderedIds.map((id) => normalizeUuid(id));
   return db.transaction(async (tx) => {
     const project = await lockProjectRow(tx, accountId, projectId);
+    assertRevision(options.expectedRevision, project.revision);
     const current = await tx
       .select()
       .from(swimlanes)
@@ -770,12 +837,12 @@ export async function reorderSwimlanes(
       .orderBy(asc(swimlanes.position), asc(swimlanes.createdAt))
       .for("update");
     if (
-      current.length !== orderedIds.length ||
-      new Set(orderedIds).size !== current.length ||
-      current.some((lane) => !orderedIds.includes(lane.id))
+      current.length !== normalizedIds.length ||
+      new Set(normalizedIds).size !== current.length ||
+      current.some((lane) => !normalizedIds.includes(lane.id))
     )
       throw new AppError("CONCURRENT_UPDATE");
-    for (const [position, id] of (orderedIds as string[]).entries()) {
+    for (const [position, id] of normalizedIds.entries()) {
       await tx
         .update(swimlanes)
         .set({ position, updatedAt: now })
@@ -794,21 +861,24 @@ export async function deleteSwimlane(
   accountId: string,
   projectId: string,
   swimlaneId: string,
+  options: BoardMutationOptions = {},
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
     const project = await lockProjectRow(tx, accountId, projectId);
+    assertRevision(options.expectedRevision, project.revision);
+    const normalizedSwimlaneId = normalizeUuid(swimlaneId);
     const [lane] = await tx
       .select()
       .from(swimlanes)
-      .where(and(eq(swimlanes.id, swimlaneId), eq(swimlanes.projectId, projectId)))
+      .where(and(eq(swimlanes.id, normalizedSwimlaneId), eq(swimlanes.projectId, projectId)))
       .for("update");
     if (!lane) throw new AppError("NOT_FOUND");
     // Tasks are introduced in Phase 3. Until then every lane is empty by the
     // workflow boundary, so deletion cannot silently discard task state.
     await tx
       .delete(swimlanes)
-      .where(and(eq(swimlanes.id, swimlaneId), eq(swimlanes.projectId, projectId)));
+      .where(and(eq(swimlanes.id, normalizedSwimlaneId), eq(swimlanes.projectId, projectId)));
     await tx
       .update(projects)
       .set({ revision: sql`${projects.revision} + 1`, updatedAt: now })
@@ -822,12 +892,14 @@ export async function createLabel(
   accountId: string,
   projectId: string,
   input: { name: unknown; color?: unknown },
+  options: BoardMutationOptions = {},
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   const name = normalizeLabelName(input.name);
   const color = normalizeColor(input.color);
   return db.transaction(async (tx) => {
     const project = await lockProjectRow(tx, accountId, projectId);
+    assertRevision(options.expectedRevision, project.revision);
     const [last] = await tx
       .select({ position: labels.position })
       .from(labels)
@@ -862,14 +934,17 @@ export async function updateLabel(
   projectId: string,
   labelId: string,
   patch: LabelPatch,
+  options: BoardMutationOptions = {},
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
     const project = await lockProjectRow(tx, accountId, projectId);
+    assertRevision(options.expectedRevision, project.revision);
+    const normalizedLabelId = normalizeUuid(labelId);
     const [label] = await tx
       .select()
       .from(labels)
-      .where(and(eq(labels.id, labelId), eq(labels.projectId, projectId)))
+      .where(and(eq(labels.id, normalizedLabelId), eq(labels.projectId, projectId)))
       .for("update");
     if (!label) throw new AppError("NOT_FOUND");
     const name = patch.name === undefined ? label.name : normalizeLabelName(patch.name);
@@ -879,7 +954,7 @@ export async function updateLabel(
       await tx
         .update(labels)
         .set({ name, normalizedName: normalizedLabelName(name), color, position, updatedAt: now })
-        .where(and(eq(labels.id, labelId), eq(labels.projectId, projectId)));
+        .where(and(eq(labels.id, normalizedLabelId), eq(labels.projectId, projectId)));
     } catch (error) {
       if (isUniqueConstraintViolation(error)) throw new AppError("CONFLICT");
       throw error;
@@ -897,12 +972,15 @@ export async function reorderLabels(
   accountId: string,
   projectId: string,
   orderedIds: unknown,
+  options: BoardMutationOptions = {},
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   if (!Array.isArray(orderedIds) || orderedIds.some((id) => typeof id !== "string"))
     throw new AppError("INVALID_REQUEST");
+  const normalizedIds = orderedIds.map((id) => normalizeUuid(id));
   return db.transaction(async (tx) => {
     const project = await lockProjectRow(tx, accountId, projectId);
+    assertRevision(options.expectedRevision, project.revision);
     const current = await tx
       .select()
       .from(labels)
@@ -910,12 +988,12 @@ export async function reorderLabels(
       .orderBy(asc(labels.position), asc(labels.createdAt))
       .for("update");
     if (
-      current.length !== orderedIds.length ||
-      new Set(orderedIds).size !== current.length ||
-      current.some((label) => !orderedIds.includes(label.id))
+      current.length !== normalizedIds.length ||
+      new Set(normalizedIds).size !== current.length ||
+      current.some((label) => !normalizedIds.includes(label.id))
     )
       throw new AppError("CONCURRENT_UPDATE");
-    for (const [position, id] of (orderedIds as string[]).entries()) {
+    for (const [position, id] of normalizedIds.entries()) {
       await tx
         .update(labels)
         .set({ position, updatedAt: now })
@@ -934,13 +1012,16 @@ export async function deleteLabel(
   accountId: string,
   projectId: string,
   labelId: string,
+  options: BoardMutationOptions = {},
   now = new Date(),
 ): Promise<ProjectSnapshot> {
   return db.transaction(async (tx) => {
     const project = await lockProjectRow(tx, accountId, projectId);
+    assertRevision(options.expectedRevision, project.revision);
+    const normalizedLabelId = normalizeUuid(labelId);
     const deleted = await tx
       .delete(labels)
-      .where(and(eq(labels.id, labelId), eq(labels.projectId, projectId)))
+      .where(and(eq(labels.id, normalizedLabelId), eq(labels.projectId, projectId)))
       .returning({ id: labels.id });
     if (deleted.length === 0) throw new AppError("NOT_FOUND");
     await tx

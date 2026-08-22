@@ -2,9 +2,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { type Database } from "@/server/db/client";
 import { columns, projects, type ProjectColumn } from "@/server/db/schema";
 import { AppError } from "@/server/http/errors";
-import { type WipMode, validateWipSettings } from "@/server/modules/projects/types";
+import { normalizeUuid, type WipMode, validateWipSettings } from "@/server/modules/projects/types";
 
-type WorkflowTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+export type WorkflowTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export interface WipEvaluation {
   mode: WipMode;
@@ -42,39 +42,43 @@ export function evaluateWip(
 }
 
 export type WipCountReader = (tx: WorkflowTransaction, columnId: string) => Promise<number>;
+export type WipMutation<T> = (tx: WorkflowTransaction, evaluation: WipEvaluation) => Promise<T>;
 
-/**
- * Lock the project and evaluate a target column before a future task move.
- * Keeping the count reader inside this transaction prevents a stale UI count
- * from becoming an authorization decision. The caller must perform its task
- * move with the returned transaction callback before it commits.
- */
-export async function assertColumnWip(
+export async function assertColumnWip<T>(
   db: Database,
   accountId: string,
   projectId: string,
   columnId: string,
   readCount: WipCountReader,
+  mutate: WipMutation<T>,
   warningConfirmed = false,
-): Promise<WipEvaluation> {
+): Promise<T> {
+  const normalizedProjectId = normalizeUuid(projectId);
+  const normalizedColumnId = normalizeUuid(columnId);
   return db.transaction(async (tx) => {
     await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext(${`taskfella-workflow:${projectId}`}))`,
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`taskfella-workflow:${normalizedProjectId}`}))`,
     );
     const [project] = await tx
       .select({ id: projects.id })
       .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.accountId, accountId)))
+      .where(and(eq(projects.id, normalizedProjectId), eq(projects.accountId, accountId)))
       .for("update");
     if (!project) throw new AppError("NOT_FOUND");
     const [column] = await tx
       .select()
       .from(columns)
-      .where(and(eq(columns.id, columnId), eq(columns.projectId, projectId)))
+      .where(and(eq(columns.id, normalizedColumnId), eq(columns.projectId, normalizedProjectId)))
       .for("update");
     if (!column) throw new AppError("NOT_FOUND");
-    const currentCount = await readCount(tx, columnId);
-    return evaluateWip(column.wipMode as WipMode, column.wipLimit, currentCount, warningConfirmed);
+    const currentCount = await readCount(tx, normalizedColumnId);
+    const evaluation = evaluateWip(
+      column.wipMode as WipMode,
+      column.wipLimit,
+      currentCount,
+      warningConfirmed,
+    );
+    return mutate(tx, evaluation);
   });
 }
 
