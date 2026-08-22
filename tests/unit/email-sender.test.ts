@@ -38,6 +38,15 @@ afterEach(async () => {
 });
 
 describe("transactional email boundary", () => {
+  it("keeps one-time links out of request URLs", () => {
+    const token = "one-time-verification-token";
+    const link = new URL(createApplicationLink("/verify-email", token, environment));
+
+    expect(link.search).toBe("");
+    expect(link.hash).toBe(` #token=${encodeURIComponent(token)}`.trim());
+    expect(link.toString()).not.toContain(`?token=${token}`);
+  });
+
   it("holds absent and slow dispatches to the same bounded response window", async () => {
     vi.useFakeTimers();
     try {

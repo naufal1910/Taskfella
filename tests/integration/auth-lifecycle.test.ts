@@ -29,6 +29,7 @@ const integration = process.env.DATABASE_URL ? describe : describe.skip;
 const db = process.env.DATABASE_URL ? getDatabase() : undefined;
 const mailDirectory = path.join(process.cwd(), ".local", "mail-phase1b-test");
 const createdAccountIds: string[] = [];
+const requestAddressPrefix = crypto.randomUUID().replaceAll("-", "").slice(0, 4);
 let requestNumber = 0;
 
 function uniqueEmail(prefix: string): string {
@@ -43,6 +44,13 @@ function cookieValue(response: Response, name: string): string | undefined {
   const header = response.headers.get("set-cookie") ?? "";
   const match = header.match(new RegExp(`${name}=([^;]+)`));
   return match?.[1] ? decodeURIComponent(match[1]) : undefined;
+}
+
+function linkToken(link: string): string | null {
+  const url = new URL(link);
+  return (
+    new URLSearchParams(url.hash.replace(/^#/, "")).get("token") ?? url.searchParams.get("token")
+  );
 }
 
 function request(
@@ -62,7 +70,8 @@ function request(
     origin: "http://localhost:3000",
     cookie: cookies.join("; "),
     "x-csrf-token": csrf,
-    "x-forwarded-for": options.forwardedFor ?? `2001:db8::${requestNumber++}`,
+    "x-forwarded-for":
+      options.forwardedFor ?? `2001:db8::${requestAddressPrefix}:${requestNumber++}`,
   });
   if (options.body !== undefined) headers.set("content-type", "application/json");
   return new Request(`http://localhost:3000${pathname}`, {
@@ -128,7 +137,7 @@ integration("Phase 1B email/password route behavior", () => {
     expect(signupMessages[0]).toMatchObject({ kind: "verification" });
     expect(signupMessages[0]?.text).toContain("expires");
     expect(signupMessages[0]?.html).toContain("Verify email address");
-    const verificationToken = new URL(signupMessages[0]!.link).searchParams.get("token");
+    const verificationToken = linkToken(signupMessages[0]!.link);
     expect(verificationToken).toBeTruthy();
     await rememberAccount(email);
 
@@ -181,7 +190,7 @@ integration("Phase 1B email/password route behavior", () => {
     expect(forgotResponse.status).toBe(202);
     const resetMessages = await capturedMessages();
     expect(resetMessages).toHaveLength(2);
-    const resetToken = new URL(resetMessages[1]!.link).searchParams.get("token");
+    const resetToken = linkToken(resetMessages[1]!.link);
     expect(resetToken).toBeTruthy();
 
     const resetResponse = await reset(
@@ -227,13 +236,13 @@ integration("Phase 1B email/password route behavior", () => {
     await rememberAccount(email);
 
     const initialMessages = await capturedMessages();
-    const firstVerification = new URL(initialMessages.at(-1)!.link).searchParams.get("token");
+    const firstVerification = linkToken(initialMessages.at(-1)!.link);
     const resendResponse = await resend(
       request("/api/auth/resend-verification", { body: { email } }),
     );
     expect(resendResponse.status).toBe(202);
     const rotatedMessages = await capturedMessages();
-    const secondVerification = new URL(rotatedMessages.at(-1)!.link).searchParams.get("token");
+    const secondVerification = linkToken(rotatedMessages.at(-1)!.link);
     expect(secondVerification).not.toBe(firstVerification);
 
     const superseded = await verify(
@@ -256,13 +265,13 @@ integration("Phase 1B email/password route behavior", () => {
     expect(await unknownForgot.json()).toEqual(await knownForgot.json());
 
     const allMessages = await capturedMessages();
-    const latestReset = new URL(allMessages.at(-1)!.link).searchParams.get("token");
+    const latestReset = linkToken(allMessages.at(-1)!.link);
     const secondResetRequest = await forgot(
       request("/api/auth/forgot-password", { body: { email } }),
     );
     expect(secondResetRequest.status).toBe(202);
     const afterSecondReset = await capturedMessages();
-    const newerReset = new URL(afterSecondReset.at(-1)!.link).searchParams.get("token");
+    const newerReset = linkToken(afterSecondReset.at(-1)!.link);
     const oldReset = await reset(
       request("/api/auth/reset-password", {
         body: { token: latestReset, password: uniquePassword("old-reset") },

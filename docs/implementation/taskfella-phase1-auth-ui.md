@@ -6,10 +6,9 @@ Shared auth UI keeps the centered warm-paper card, Taskfella mark, canonical tea
 
 ## Verification record
 
-- `pnpm test:unit` — pass (45 tests), including static accessibility/state coverage in `tests/unit/auth-ui.test.ts`.
+- `pnpm test:unit` — pass, including static accessibility/state coverage in `tests/unit/auth-ui.test.ts`.
 - `pnpm typecheck` — pass.
 - `pnpm lint` — pass.
 - `pnpm format:check` — pass.
-- `pnpm exec vitest run --no-file-parallelism` — pass (65 tests); serial execution avoids the repository's pre-existing concurrent PostgreSQL rate-limit test contention.
-- Running-app HTTP/HTML checks — pass for all Phase 1B routes; rendered labels, ARIA references, loading state, missing-link recovery, and served mobile/reduced-motion CSS were verified without browser automation.
-- `chrome-devtools-axi` was attempted for rendered visual verification, but the browser target closed before `snapshot` twice (`Target.setDiscoverTargets: Target closed`). No screenshot was available; verification proceeded with the HTTP/HTML and focused test evidence above.
+- `pnpm exec vitest run --no-file-parallelism` — pass; the Vitest configuration serializes file execution so concurrent PostgreSQL integration fixtures cannot contend with fixed-time rate-limit cases.
+- Running-app HTTP/HTML checks — pass for all Phase 1B routes; rendered labels, ARIA references, loading state, missing-link recovery, and served mobile/reduced-motion CSS are covered by the integrated [Phase 1E verification record](taskfella-phase1e-verification.md).

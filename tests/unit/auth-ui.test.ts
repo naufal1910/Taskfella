@@ -7,13 +7,16 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/login",
 }));
 
-import { AccountState } from "@/components/auth/account-state";
+import { AccountState, accountLinkErrorMessage } from "@/components/auth/account-state";
+import VerifyEmailPage from "@/app/verify-email/page";
+import ResetPasswordPage from "@/app/reset-password/page";
 import {
   AuthForm,
   AuthFeedback,
   authErrorMessage,
   classifyAuthErrorCode,
   CompletionState,
+  shouldStartVerificationAttempt,
   TokenState,
 } from "@/components/auth/auth-form";
 import { AuthPage } from "@/components/auth/auth-page";
@@ -38,8 +41,8 @@ describe("authentication lifecycle UI", () => {
   });
 
   it("makes missing one-time links an explicit recoverable state without rendering a token", () => {
-    const verification = markup(createElement(AuthForm, { mode: "verify" }));
-    const reset = markup(createElement(AuthForm, { mode: "reset" }));
+    const verification = markup(createElement(AuthForm, { mode: "verify", token: "" }));
+    const reset = markup(createElement(AuthForm, { mode: "reset", token: "" }));
 
     expect(verification).toContain("This verification link is incomplete.");
     expect(verification).toContain("Request a fresh verification link");
@@ -47,6 +50,31 @@ describe("authentication lifecycle UI", () => {
     expect(reset).toContain("This reset link is incomplete.");
     expect(reset).toContain("Request a new reset link");
     expect(reset).not.toContain('name="password"');
+  });
+
+  it("does not serialize one-time bearer values through verification or reset page HTML", async () => {
+    const token = "one-time-page-token";
+    const props = { searchParams: Promise.resolve({ token }) };
+    const verificationPage = VerifyEmailPage as unknown as (
+      input: typeof props,
+    ) => React.ReactElement | Promise<React.ReactElement>;
+    const resetPage = ResetPasswordPage as unknown as (
+      input: typeof props,
+    ) => React.ReactElement | Promise<React.ReactElement>;
+    const verification = markup(await verificationPage(props));
+    const reset = markup(await resetPage(props));
+
+    expect(verification).not.toContain(token);
+    expect(reset).not.toContain(token);
+    expect(verification).not.toContain('name="token"');
+    expect(reset).not.toContain('name="token"');
+  });
+
+  it("starts one verification attempt per effective hash token", () => {
+    expect(shouldStartVerificationAttempt(undefined, "first-token")).toBe(true);
+    expect(shouldStartVerificationAttempt("first-token", "first-token")).toBe(false);
+    expect(shouldStartVerificationAttempt("first-token", "second-token")).toBe(true);
+    expect(shouldStartVerificationAttempt("first-token", undefined)).toBe(false);
   });
 
   it("preserves an explicit pending verification state and keeps the bearer value out of markup", () => {
@@ -72,6 +100,12 @@ describe("authentication lifecycle UI", () => {
     expect(html).toContain('class="auth-feedback auth-feedback--pending"');
     expect(html).toContain('role="status"');
     expect(html).not.toContain("Complete");
+  });
+
+  it("maps unconfigured account linking to an actionable safe UI state", () => {
+    expect(accountLinkErrorMessage("OAUTH_NOT_CONFIGURED")).toContain("not configured");
+    expect(accountLinkErrorMessage("OAUTH_NOT_CONFIGURED")).toContain("email and password");
+    expect(accountLinkErrorMessage()).toContain("safely");
   });
 
   it("maps security-sensitive and recoverable failures to safe UI copy", () => {

@@ -18,7 +18,7 @@ export function AuthPage({ children }: { children: ReactNode }) {
   return (
     <div className="auth-frame">
       <header className="auth-header">
-        <Link className="brand" href="/" aria-label="Taskfella home">
+        <Link className="brand" href="/">
           <BrandMark />
           <span>Taskfella</span>
         </Link>

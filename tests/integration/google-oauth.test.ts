@@ -25,6 +25,7 @@ const environment = parseEnvironment({
 
 const createdAccountIds: string[] = [];
 const createdStateHashes: string[] = [];
+const requestAddressPrefix = Number.parseInt(crypto.randomUUID().slice(0, 2), 16);
 let requestNumber = 0;
 
 function uniqueEmail(prefix: string): string {
@@ -59,7 +60,7 @@ function callbackRequest(
   return new Request(callback, {
     headers: {
       origin: "http://localhost:3000",
-      "x-forwarded-for": `198.51.100.${(requestNumber++ % 200) + 1}`,
+      "x-forwarded-for": `198.51.${requestAddressPrefix}.${(requestNumber++ % 200) + 1}`,
       cookie: cookieHeader({
         taskfella_oauth_state: state,
         taskfella_oauth_verifier: options.wrongVerifier ? "wrong-pkce-verifier" : verifier,
@@ -77,7 +78,7 @@ function startRequest(intent: "signin" | "link", session?: string): Request {
     method: intent === "link" ? "POST" : "GET",
     headers: {
       origin: "http://localhost:3000",
-      "x-forwarded-for": `198.51.100.${(requestNumber++ % 200) + 1}`,
+      "x-forwarded-for": `198.51.${requestAddressPrefix}.${(requestNumber++ % 200) + 1}`,
       "x-csrf-token": csrf ?? "",
       cookie: cookieHeader({ taskfella_session: session, taskfella_csrf: csrf }),
     },
@@ -279,6 +280,29 @@ integration("Google OAuth and explicit identity linking", () => {
         { db, environment, provider },
       ),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("returns a provider URL for configured JSON linking requests", async () => {
+    if (!db) return;
+    const owner = await accountWithPassword(uniqueEmail("json-link"));
+    const provider = providerFor({
+      subject: `google-subject-${crypto.randomUUID()}`,
+      email: owner.email,
+    });
+    const response = await startGoogleAuthorization(startRequest("link", owner.session), {
+      db,
+      environment,
+      provider,
+      responseMode: "json",
+    });
+    const payload = (await response.json()) as { authorizationUrl?: string };
+    const state = cookieValue(response, "taskfella_oauth_state");
+    if (state) createdStateHashes.push(hashBearerToken(state));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(payload.authorizationUrl).toMatch(/^https:\/\/accounts\.google\.test\/authorize\?/);
+    expect(state).toBeTruthy();
   });
 
   it("links explicitly, rotates the linking session, and keeps provider subjects private", async () => {

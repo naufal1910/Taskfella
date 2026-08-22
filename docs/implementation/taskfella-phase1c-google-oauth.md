@@ -4,7 +4,7 @@ Phase 1C adds Google sign-in to the Phase 1A/1B authentication foundation withou
 
 ## Configuration
 
-Google is optional in local development. Leave both variables unset to keep email/password authentication available; the Google action returns a clear not-configured state instead of silently using another provider.
+Google is optional in local development. Leave both variables unset to keep email/password authentication available; browser sign-in redirects to a clear not-configured state, while the authenticated link action returns a safe `OAUTH_NOT_CONFIGURED` response and tells the account holder to continue with email/password or ask an administrator to enable Google.
 
 ```dotenv
 GOOGLE_CLIENT_ID=replace-with-google-client-id.apps.googleusercontent.com
@@ -60,4 +60,4 @@ pnpm build
 
 OAuth behavior tests use a mocked provider boundary and local placeholder configuration only. They do not contain credentials, authorization codes, access/refresh tokens, or raw session fixtures.
 
-The disposable browser target used for this worktree closed before navigation, so no screenshot evidence was collected. The rendered authentication states were instead verified through the real Next.js route responses, response headers, callback redirects, and focused HTTP/HTML checks; this limitation is recorded here rather than treated as successful browser automation. The HTTP evidence included `GET /login` and `GET /signup` containing the Google action, no-cache/no-store response headers, the clear `503 OAUTH_NOT_CONFIGURED` local response, and the safe callback redirect to `/login?oauth=not-configured`.
+The integrated browser, security, leakage, and readiness evidence for this behavior is maintained in the [Phase 1E verification record](taskfella-phase1e-verification.md). The configured-path OAuth tests continue to use a mocked provider and local placeholders; no external credential or human-only login is required.

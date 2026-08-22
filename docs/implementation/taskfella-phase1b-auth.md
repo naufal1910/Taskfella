@@ -16,7 +16,7 @@ Phase 1B implements the accessible email/password identity lifecycle on the Phas
 
 `src/server/modules/auth/email-sender.ts` is the only transactional-email boundary. It renders minimal plain-text and accessible HTML messages with no unrelated personal content, derives links from `APP_URL`, and states each one-time link's expiration. The [foundation operations guide](../operations.md) owns delivery-mode configuration, local artifact inspection and cleanup, and production SMTP requirements.
 
-SMTP uses the portable Nodemailer SMTP transport rather than a provider-specific SDK. Raw links are not logged or returned by API responses.
+SMTP uses the portable Nodemailer SMTP transport rather than a provider-specific SDK. One-time links use URL fragments so their raw bearer values are not sent in requests, logged by the application, or embedded in server-rendered HTML. The client submits the value through the CSRF-protected verification/reset mutation; legacy query-style links remain accepted during the transition. Raw links are not returned by API responses.
 
 ## Verification
 

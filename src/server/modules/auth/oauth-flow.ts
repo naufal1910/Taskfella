@@ -74,6 +74,16 @@ function clearAndRedirect(
   return response;
 }
 
+function oauthNotConfiguredError(intent: OAuthIntent): AppError {
+  if (intent === "link") {
+    return new AppError(
+      "OAUTH_NOT_CONFIGURED",
+      "Google linking is not configured for this environment.",
+    );
+  }
+  return new AppError("OAUTH_NOT_CONFIGURED");
+}
+
 async function rateLimitOAuthFailure(
   request: Request,
   db: Database,
@@ -95,12 +105,26 @@ export async function startGoogleAuthorization(
   options: OAuthFlowOptions,
 ): Promise<NextResponse> {
   const environment = options.environment ?? getEnvironment();
-  const config = getGoogleOAuthConfig(environment);
-  if (!config) {
-    throw new AppError("OAUTH_NOT_CONFIGURED");
-  }
-
   const intent = getIntent(request);
+  const browserRedirect = request.method === "GET" && options.responseMode !== "json";
+  let config: ReturnType<typeof getGoogleOAuthConfig>;
+  try {
+    config = getGoogleOAuthConfig(environment);
+  } catch (error) {
+    if (browserRedirect) {
+      return clearAndRedirect(environment, "/login", "not-configured");
+    }
+    if (intent === "link" && error instanceof AppError && error.code === "OAUTH_NOT_CONFIGURED") {
+      throw oauthNotConfiguredError(intent);
+    }
+    throw error;
+  }
+  if (!config) {
+    if (browserRedirect) {
+      return clearAndRedirect(environment, "/login", "not-configured");
+    }
+    throw oauthNotConfiguredError(intent);
+  }
   if (intent === "signin" && request.method !== "GET") {
     throw new AppError("FORBIDDEN");
   }
