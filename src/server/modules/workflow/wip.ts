@@ -56,6 +56,12 @@ export async function assertColumnWip<T>(
   const normalizedProjectId = normalizeUuid(projectId);
   const normalizedColumnId = normalizeUuid(columnId);
   return db.transaction(async (tx) => {
+    const [ownedProject] = await tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, normalizedProjectId), eq(projects.accountId, accountId)))
+      .limit(1);
+    if (!ownedProject) throw new AppError("NOT_FOUND");
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${`taskfella-workflow:${normalizedProjectId}`}))`,
     );

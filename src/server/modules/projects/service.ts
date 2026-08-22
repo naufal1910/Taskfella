@@ -136,6 +136,12 @@ async function lockProjectRow(
   projectId: string,
 ): Promise<Project> {
   const normalizedProjectId = normalizeUuid(projectId);
+  const [ownedProject] = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(and(eq(projects.id, normalizedProjectId), eq(projects.accountId, accountId)))
+    .limit(1);
+  if (!ownedProject) throw new AppError("NOT_FOUND");
   await db.execute(
     sql`SELECT pg_advisory_xact_lock(hashtext(${`taskfella-workflow:${normalizedProjectId}`}))`,
   );
@@ -493,7 +499,11 @@ function draftFromColumn(
     position,
     wipMode,
     wipLimit: normalizeWipLimit(
-      patch.wipLimit === undefined ? column.wipLimit : patch.wipLimit,
+      patch.wipLimit === undefined
+        ? patch.wipMode === "none"
+          ? null
+          : column.wipLimit
+        : patch.wipLimit,
       wipMode,
     ),
     completedGrouping: normalizeCompletedGrouping(

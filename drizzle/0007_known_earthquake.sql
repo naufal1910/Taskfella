@@ -143,6 +143,9 @@ DECLARE
   active_count integer;
   completed_count integer;
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM "projects" WHERE "id" = NEW.id) THEN
+    RETURN NULL;
+  END IF;
   PERFORM 1 FROM "projects" WHERE "id" = NEW.id FOR UPDATE;
   SELECT
     count(*) FILTER (WHERE "role" = 'active'),
