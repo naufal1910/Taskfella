@@ -2,11 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  TaskBoardColumn,
-  TaskDetails,
-  taskDropPosition,
-} from "@/components/projects/task-board";
+import { TaskBoardColumn, TaskDetails, taskDropPosition } from "@/components/projects/task-board";
 import type { SwimlaneData, TaskData } from "@/components/projects/project-api";
 
 const project = {

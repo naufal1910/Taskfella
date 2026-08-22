@@ -30,12 +30,7 @@ import {
   updateLabel,
   updateSwimlane,
 } from "@/server/modules/projects/service";
-import {
-  createNote,
-  createSubtask,
-  createTask,
-  trashTask,
-} from "@/server/modules/tasks/service";
+import { createNote, createSubtask, createTask, trashTask } from "@/server/modules/tasks/service";
 import { assertColumnWip } from "@/server/modules/workflow/wip";
 import { DELETE as deleteProjectColumnRoute } from "@/app/api/projects/[projectId]/columns/[columnId]/route";
 import { DELETE as deleteProjectLabelRoute } from "@/app/api/projects/[projectId]/labels/[labelId]/route";
@@ -646,18 +641,18 @@ integration("Phase 2 projects and workflow transactions", () => {
     await expect(
       permanentlyDeleteProject(db, account.id, snapshot.project.id, "wrong"),
     ).rejects.toMatchObject({ code: "PERMANENT_DELETE_CONFIRMATION_REQUIRED" });
-    expect(await db.select().from(projects).where(eq(projects.id, snapshot.project.id))).toHaveLength(
-      1,
-    );
-    expect(await db.select().from(tasks).where(eq(tasks.projectId, snapshot.project.id))).toHaveLength(
-      2,
-    );
+    expect(
+      await db.select().from(projects).where(eq(projects.id, snapshot.project.id)),
+    ).toHaveLength(1);
+    expect(
+      await db.select().from(tasks).where(eq(tasks.projectId, snapshot.project.id)),
+    ).toHaveLength(2);
     expect(
       await db.select().from(subtasks).where(eq(subtasks.projectId, snapshot.project.id)),
     ).toHaveLength(1);
-    expect(await db.select().from(notes).where(eq(notes.projectId, snapshot.project.id))).toHaveLength(
-      1,
-    );
+    expect(
+      await db.select().from(notes).where(eq(notes.projectId, snapshot.project.id)),
+    ).toHaveLength(1);
     expect(
       await db.select().from(taskLabels).where(eq(taskLabels.projectId, snapshot.project.id)),
     ).toHaveLength(1);
@@ -669,18 +664,18 @@ integration("Phase 2 projects and workflow transactions", () => {
     ).toHaveLength(3);
 
     await permanentlyDeleteProject(db, account.id, snapshot.project.id, "Task-bearing board");
-    expect(await db.select().from(projects).where(eq(projects.id, snapshot.project.id))).toHaveLength(
-      0,
-    );
-    expect(await db.select().from(tasks).where(eq(tasks.projectId, snapshot.project.id))).toHaveLength(
-      0,
-    );
+    expect(
+      await db.select().from(projects).where(eq(projects.id, snapshot.project.id)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(tasks).where(eq(tasks.projectId, snapshot.project.id)),
+    ).toHaveLength(0);
     expect(
       await db.select().from(subtasks).where(eq(subtasks.projectId, snapshot.project.id)),
     ).toHaveLength(0);
-    expect(await db.select().from(notes).where(eq(notes.projectId, snapshot.project.id))).toHaveLength(
-      0,
-    );
+    expect(
+      await db.select().from(notes).where(eq(notes.projectId, snapshot.project.id)),
+    ).toHaveLength(0);
     expect(
       await db.select().from(taskLabels).where(eq(taskLabels.projectId, snapshot.project.id)),
     ).toHaveLength(0);
