@@ -2,7 +2,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { TaskBoardColumn, TaskDetails } from "@/components/projects/task-board";
+import {
+  TaskBoardColumn,
+  TaskDetails,
+  taskDropPosition,
+} from "@/components/projects/task-board";
 import type { SwimlaneData, TaskData } from "@/components/projects/project-api";
 
 const project = {
@@ -189,6 +193,22 @@ describe("task color details control", () => {
     expect(html).toContain('value="#246BCE"');
     expect(html).toContain("Using #246BCE");
     expect(html).toContain('aria-label="Clear card color"');
+  });
+});
+
+describe("task drop ordering", () => {
+  it("places a downward drop at the target's post-removal slot", () => {
+    const source = { ...task(null), id: "source", position: 0 };
+    const target = { ...task(null), id: "target", position: 2 };
+    const otherLaneTarget = {
+      ...target,
+      id: "other-lane-target",
+      swimlaneId: project.swimlanes[0]!.id,
+    };
+
+    expect(taskDropPosition(source, target)).toBe(1);
+    expect(taskDropPosition({ ...source, position: 2 }, { ...target, position: 0 })).toBe(0);
+    expect(taskDropPosition(source, otherLaneTarget)).toBe(2);
   });
 });
 

@@ -499,6 +499,9 @@ export async function permanentlyDeleteProject(
     if (confirmation !== project.name) {
       throw new AppError("PERMANENT_DELETE_CONFIRMATION_REQUIRED");
     }
+    await tx
+      .delete(tasks)
+      .where(and(eq(tasks.projectId, project.id), eq(tasks.accountId, accountId)));
     await tx.delete(projects).where(eq(projects.id, project.id));
     await normalizeActiveProjectPositions(tx, accountId, new Date());
   });

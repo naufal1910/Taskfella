@@ -67,6 +67,12 @@ function orderSwimlanes(laneItems: SwimlaneData[]): SwimlaneData[] {
   );
 }
 
+export function taskDropPosition(source: TaskData, target: TaskData): number {
+  const sameLocation =
+    source.columnId === target.columnId && source.swimlaneId === target.swimlaneId;
+  return sameLocation && source.position < target.position ? target.position - 1 : target.position;
+}
+
 function taskUrl(projectId: string, taskId: string, suffix = "") {
   return `/api/projects/${projectId}/tasks/${taskId}${suffix}`;
 }
@@ -1294,7 +1300,7 @@ export function TaskBoard({ project }: { project: BoardProject }) {
     const taskId = event.dataTransfer.getData("text/task-id") || draggedTaskId;
     const task = tasks.find((item) => item.id === taskId);
     if (task && task.id !== target.id)
-      void move(task, target.columnId, target.swimlaneId, target.position);
+      void move(task, target.columnId, target.swimlaneId, taskDropPosition(task, target));
     setDraggedTaskId(undefined);
   }
 
