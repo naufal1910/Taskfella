@@ -123,6 +123,21 @@ integration("Phase 2 projects and workflow transactions", () => {
       ok: true,
       project: { name: "Route board", columns: [{ role: "active" }, { role: "completed" }] },
     });
+    const malformedColumns = await createProjectRoute(
+      mutationWithSession(session.token, "/api/projects", {
+        name: "Malformed board",
+        template: "blank",
+        columns: [
+          { name: "Ready", role: "active" },
+          null,
+          { name: "Done", role: "completed" },
+        ],
+      }),
+    );
+    expect(malformedColumns.status).toBe(400);
+    expect(await malformedColumns.json()).toMatchObject({
+      error: { code: "INVALID_REQUEST" },
+    });
     const listed = await listProjectsRoute(requestWithSession(session.token, "/api/projects"));
     expect(listed.status).toBe(200);
     expect(await listed.json()).toMatchObject({

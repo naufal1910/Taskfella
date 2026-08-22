@@ -12,6 +12,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const revalidate = 0;
 
+function isColumnRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export async function GET(request: Request): Promise<NextResponse> {
   return projectRoute(request, async ({ account }) => {
     const projects = await projectListPayload(getDatabase(), account.id);
@@ -25,23 +29,19 @@ export async function POST(request: Request): Promise<NextResponse> {
     async ({ account }) => {
       const body = await parseJsonObject(request);
       const template = normalizeProjectTemplate(body.template);
+      const rawColumns = body.columns;
       const columns =
-        body.columns === undefined
+        rawColumns === undefined
           ? undefined
-          : Array.isArray(body.columns)
-            ? body.columns
-                .filter(
-                  (column): column is Record<string, unknown> =>
-                    typeof column === "object" && column !== null,
-                )
-                .map((column) => ({
-                  name: column.name as string,
-                  role: column.role as never,
-                  position: column.position as never,
-                  wipMode: column.wipMode as never,
-                  wipLimit: column.wipLimit as never,
-                  completedGrouping: column.completedGrouping as never,
-                }))
+          : Array.isArray(rawColumns) && rawColumns.every(isColumnRecord)
+            ? rawColumns.map((column) => ({
+                name: column.name as string,
+                role: column.role as never,
+                position: column.position as never,
+                wipMode: column.wipMode as never,
+                wipLimit: column.wipLimit as never,
+                completedGrouping: column.completedGrouping as never,
+              }))
             : undefined;
       if (body.columns !== undefined && columns === undefined) {
         return projectJson(

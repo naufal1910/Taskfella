@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type CSSProperties, type FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Button, StatusBadge, Surface } from "@/components/ui/primitives";
 import {
   apiRequest,
@@ -14,12 +21,14 @@ import {
 import { FocusDialog } from "./focus-dialog";
 import { ProjectNavigation } from "./project-navigation";
 
+type BoardProject = ProjectData & {
+  columns: ProjectColumnData[];
+  swimlanes: SwimlaneData[];
+  labels: LabelData[];
+};
+
 type ProjectResponse = {
-  project: ProjectData & {
-    columns: ProjectColumnData[];
-    swimlanes: SwimlaneData[];
-    labels: LabelData[];
-  };
+  project: BoardProject;
 };
 
 type Role = ProjectColumnData["role"];
@@ -749,24 +758,27 @@ function BoardExtras({
 }
 
 export function BoardScreen({ projectId }: { projectId: string }) {
-  const [project, setProject] = useState<
-    ProjectData & { columns: ProjectColumnData[]; swimlanes: SwimlaneData[]; labels: LabelData[] }
-  >();
+  const [project, setProject] = useState<BoardProject>();
   const [selectedColumnId, setSelectedColumnId] = useState<string>();
   const [pending, setPending] = useState(true);
   const [error, setError] = useState<string>();
   const router = useRouter();
 
+  const applyProjectSnapshot = useCallback((next: ProjectData): void => {
+    const nextColumns = next.columns ?? [];
+    setProject(next as BoardProject);
+    setSelectedColumnId((current) =>
+      current && nextColumns.some((column) => column.id === current)
+        ? current
+        : nextColumns[0]?.id,
+    );
+  }, []);
+
   async function load() {
     setPending(true);
     try {
       const response = await apiRequest<ProjectResponse>(`/api/projects/${projectId}`);
-      setProject(response.project);
-      setSelectedColumnId((current) =>
-        current && response.project.columns.some((column) => column.id === current)
-          ? current
-          : response.project.columns[0]?.id,
-      );
+      applyProjectSnapshot(response.project);
       setError(undefined);
     } catch (caught) {
       const status = (caught as Error & { status?: number }).status;
@@ -788,12 +800,7 @@ export function BoardScreen({ projectId }: { projectId: string }) {
     void apiRequest<ProjectResponse>(`/api/projects/${projectId}`)
       .then((response) => {
         if (!active) return;
-        setProject(response.project);
-        setSelectedColumnId((current) =>
-          current && response.project.columns.some((column) => column.id === current)
-            ? current
-            : response.project.columns[0]?.id,
-        );
+        applyProjectSnapshot(response.project);
         setError(undefined);
       })
       .catch((caught) => {
@@ -815,7 +822,7 @@ export function BoardScreen({ projectId }: { projectId: string }) {
     return () => {
       active = false;
     };
-  }, [projectId, router]);
+  }, [applyProjectSnapshot, projectId, router]);
 
   const selected = useMemo(
     () => project?.columns.find((column) => column.id === selectedColumnId),
@@ -863,19 +870,13 @@ export function BoardScreen({ projectId }: { projectId: string }) {
             {project.description && <p className="board-description">{project.description}</p>}
           </div>
           <div className="board-header__actions">
-            <ProjectDetailsEditor
-              project={project}
-              onSaved={(next) => setProject(next as typeof project)}
-            />
+            <ProjectDetailsEditor project={project} onSaved={applyProjectSnapshot} />
             <WorkflowEditor
               key={project.revision}
               project={project}
-              onSaved={(next) => setProject(next as typeof project)}
+              onSaved={applyProjectSnapshot}
             />
-            <BoardLifecycle
-              project={project}
-              onChanged={(next) => setProject(next as typeof project)}
-            />
+            <BoardLifecycle project={project} onChanged={applyProjectSnapshot} />
           </div>
         </header>
         <div className="mobile-column-picker">
@@ -915,7 +916,7 @@ export function BoardScreen({ projectId }: { projectId: string }) {
             )}
           </div>
         </section>
-        <BoardExtras project={project} onSaved={(next) => setProject(next as typeof project)} />
+        <BoardExtras project={project} onSaved={applyProjectSnapshot} />
         <section className="board-history" aria-labelledby="history-title">
           <div>
             <p className="eyebrow">Retained lifecycle</p>
