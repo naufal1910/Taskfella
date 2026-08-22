@@ -24,7 +24,10 @@ export function FocusDialog({
   const dialogRef = useRef<HTMLElement>(null);
   const previousRef = useRef<HTMLElement | null>(currentActiveElement());
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const dialog = dialogRef.current;

@@ -768,9 +768,7 @@ export function BoardScreen({ projectId }: { projectId: string }) {
     const nextColumns = next.columns ?? [];
     setProject(next as BoardProject);
     setSelectedColumnId((current) =>
-      current && nextColumns.some((column) => column.id === current)
-        ? current
-        : nextColumns[0]?.id,
+      current && nextColumns.some((column) => column.id === current) ? current : nextColumns[0]?.id,
     );
   }, []);
 

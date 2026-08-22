@@ -224,12 +224,7 @@ export function normalizeUuid(value: unknown): string {
 
 export function normalizePosition(value: unknown, fallback: number): number {
   if (value === undefined) return fallback;
-  if (
-    typeof value !== "number" ||
-    !Number.isInteger(value) ||
-    value < 0 ||
-    value > 2_147_483_647
-  ) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 2_147_483_647) {
     throw new AppError("INVALID_REQUEST");
   }
   return value;
