@@ -1,0 +1,1290 @@
+"use client";
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+} from "react";
+import { Button, StatusBadge } from "@/components/ui/primitives";
+import { renderMarkdown } from "@/server/modules/tasks/markdown";
+import {
+  apiRequest,
+  type LabelData,
+  type ProjectColumnData,
+  type ProjectData,
+  type SubtaskData,
+  type SwimlaneData,
+  type TaskData,
+} from "./project-api";
+
+type BoardProject = ProjectData & {
+  columns: ProjectColumnData[];
+  swimlanes: SwimlaneData[];
+  labels: LabelData[];
+};
+
+type TaskResponse = { task: TaskData };
+type TaskListResponse = { tasks: TaskData[] };
+
+function taskUrl(projectId: string, taskId: string, suffix = "") {
+  return `/api/projects/${projectId}/tasks/${taskId}${suffix}`;
+}
+
+function errorCode(error: unknown): string | undefined {
+  return (error as Error & { code?: string }).code;
+}
+
+function dueLabel(dueDate: string | null): string | undefined {
+  if (!dueDate) return undefined;
+  const today = new Date().toISOString().slice(0, 10);
+  if (dueDate < today) return "Overdue";
+  if (dueDate === today) return "Due today";
+  return `Due ${dueDate}`;
+}
+
+function TaskCard({
+  task,
+  project,
+  onOpen,
+  onMove,
+  onDropOnTask,
+}: {
+  task: TaskData;
+  project: BoardProject;
+  onOpen: (task: TaskData, trigger: HTMLElement) => void;
+  onMove: (task: TaskData, columnId: string, swimlaneId: string | null, position?: number) => void;
+  onDropOnTask: (event: DragEvent<HTMLElement>, task: TaskData) => void;
+}) {
+  const [moveValue, setMoveValue] = useState("");
+  const currentColumn = project.columns.find((column) => column.id === task.columnId);
+  const due = dueLabel(task.dueDate);
+
+  return (
+    <div
+      className="task-card"
+      draggable={!task.deletedAt}
+      style={task.color ? { borderInlineStartColor: task.color } : undefined}
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/task-id", task.id);
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => onDropOnTask(event, task)}
+      aria-label={`Task ${task.title}`}
+      role="listitem"
+    >
+      <div className="task-card__topline">
+        {currentColumn && <span className="task-card__column">{currentColumn.name}</span>}
+        {task.completedAt && <StatusBadge status="success">Completed</StatusBadge>}
+        {task.deletedAt && <StatusBadge status="warning">Trash</StatusBadge>}
+      </div>
+      <button
+        className="task-card__title"
+        type="button"
+        onClick={(event) => onOpen(task, event.currentTarget)}
+      >
+        {task.title}
+      </button>
+      <div className="task-card__meta">
+        {due && (
+          <span
+            className={
+              due === "Overdue" ? "task-card__due task-card__due--overdue" : "task-card__due"
+            }
+          >
+            {due}
+          </span>
+        )}
+        {task.labels.map((label) => (
+          <span className="task-label" key={label.id} style={{ borderColor: label.color }}>
+            {label.name}
+          </span>
+        ))}
+        {(task.subtaskCount ?? 0) > 0 && (
+          <span
+            aria-label={`${task.completedSubtaskCount ?? 0} of ${task.subtaskCount} subtasks complete`}
+          >
+            ✓ {task.completedSubtaskCount}/{task.subtaskCount}
+          </span>
+        )}
+        {(task.noteCount ?? 0) > 0 && (
+          <span aria-label={`${task.noteCount} notes`}>▤ {task.noteCount}</span>
+        )}
+      </div>
+      {!task.deletedAt ? (
+        <div className="task-card__actions">
+          <label className="task-move-control">
+            <span className="sr-only">Move {task.title} to</span>
+            <select
+              id={`move-task-${task.id}`}
+              name={`move-task-${task.id}`}
+              aria-label={`Move ${task.title} to another column`}
+              value={moveValue}
+              onChange={(event) => {
+                const destination = event.target.value;
+                setMoveValue("");
+                if (destination) onMove(task, destination, task.swimlaneId);
+              }}
+            >
+              <option value="">Move to…</option>
+              {project.columns.map((column) => (
+                <option value={column.id} key={column.id} disabled={column.id === task.columnId}>
+                  {column.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="text-button"
+            type="button"
+            onClick={(event) => onOpen(task, event.currentTarget)}
+          >
+            Details
+          </button>
+          <button
+            className="text-button"
+            type="button"
+            aria-label={`Move ${task.title} up`}
+            onClick={() =>
+              onMove(task, task.columnId, task.swimlaneId, Math.max(0, task.position - 1))
+            }
+            disabled={task.position === 0}
+          >
+            ↑
+          </button>
+          <button
+            className="text-button"
+            type="button"
+            aria-label={`Move ${task.title} down`}
+            onClick={() => onMove(task, task.columnId, task.swimlaneId, task.position + 1)}
+          >
+            ↓
+          </button>
+        </div>
+      ) : (
+        <div className="task-card__actions">
+          <button
+            className="text-button"
+            type="button"
+            onClick={(event) => onOpen(task, event.currentTarget)}
+          >
+            Restore or delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuickCreate({
+  columnId,
+  swimlaneId,
+  disabled,
+  onCreate,
+}: {
+  columnId: string;
+  swimlaneId: string | null;
+  disabled: boolean;
+  onCreate: (
+    title: string,
+    details: boolean,
+    columnId: string,
+    swimlaneId: string | null,
+  ) => Promise<void>;
+}) {
+  const [title, setTitle] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>, details = false) {
+    event.preventDefault();
+    const value = title.trim();
+    if (!value || disabled) return;
+    await onCreate(value, details, columnId, swimlaneId);
+    setTitle("");
+    if (!details) inputRef.current?.focus();
+  }
+
+  return (
+    <form className="quick-create" onSubmit={(event) => void submit(event)}>
+      <label className="sr-only" htmlFor={`quick-create-${columnId}`}>
+        Add task to this column
+      </label>
+      <input
+        ref={inputRef}
+        id={`quick-create-${columnId}`}
+        value={title}
+        onChange={(event) => setTitle(event.target.value)}
+        placeholder="Add a task…"
+        maxLength={240}
+        disabled={disabled}
+      />
+      <div className="quick-create__actions">
+        <button
+          className="ui-button ui-button--primary"
+          type="submit"
+          disabled={disabled || !title.trim()}
+        >
+          Add task
+        </button>
+        <button
+          className="text-button"
+          type="button"
+          disabled={disabled || !title.trim()}
+          onClick={(event) => void submit(event as unknown as FormEvent<HTMLFormElement>, true)}
+        >
+          Add details
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MarkdownPreview({ value }: { value: string }) {
+  if (!value.trim()) return <p className="markdown-empty">No description yet.</p>;
+  return (
+    <div className="markdown-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(value) }} />
+  );
+}
+
+function TaskDetails({
+  project,
+  task,
+  onClose,
+  onChanged,
+  trigger,
+}: {
+  project: BoardProject;
+  task: TaskData;
+  onClose: () => void;
+  onChanged: (task: TaskData) => void;
+  trigger: HTMLElement | null;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description);
+  const [columnId, setColumnId] = useState(task.columnId);
+  const [swimlaneId, setSwimlaneId] = useState(task.swimlaneId ?? "");
+  const [dueDate, setDueDate] = useState(task.dueDate ?? "");
+  const [color, setColor] = useState(task.color ?? "#0F766E");
+  const [labelIds, setLabelIds] = useState(task.labels.map((label) => label.id));
+  const [subtaskText, setSubtaskText] = useState("");
+  const [noteBody, setNoteBody] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+  const previousFocus = useRef<HTMLElement | null>(trigger);
+
+  useEffect(() => {
+    const previous = previousFocus.current;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+      if (event.key === "Tab" && panelRef.current) {
+        const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])",
+        );
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const timer = window.setTimeout(() => closeRef.current?.focus(), 0);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("keydown", onKeyDown);
+      previous?.focus();
+    };
+  }, [onClose]);
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(undefined);
+    const payload = {
+      title,
+      description,
+      columnId,
+      swimlaneId: swimlaneId || null,
+      dueDate: dueDate || null,
+      color: color || null,
+      labelIds,
+      expectedRevision: task.revision,
+    };
+    try {
+      const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id), {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      onChanged(response.task);
+    } catch (caught) {
+      if (
+        errorCode(caught) === "WIP_CONFIRMATION_REQUIRED" &&
+        window.confirm("This column is at its WIP warning limit. Save the move anyway?")
+      ) {
+        try {
+          const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id), {
+            method: "PATCH",
+            body: JSON.stringify({ ...payload, warningConfirmed: true }),
+          });
+          onChanged(response.task);
+        } catch (retryError) {
+          setError(
+            retryError instanceof Error ? retryError.message : "We could not save this task.",
+          );
+        }
+      } else {
+        setError(caught instanceof Error ? caught.message : "We could not save this task.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addSubtask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!subtaskText.trim()) return;
+    setSaving(true);
+    try {
+      const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id, "/subtasks"), {
+        method: "POST",
+        body: JSON.stringify({ text: subtaskText }),
+      });
+      setSubtaskText("");
+      onChanged(response.task);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "We could not add that subtask.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleSubtask(subtask: SubtaskData) {
+    setSaving(true);
+    try {
+      const response = await apiRequest<TaskResponse>(
+        taskUrl(project.id, task.id, `/subtasks/${subtask.id}`),
+        {
+          method: "PATCH",
+          body: JSON.stringify({ completed: !subtask.completed }),
+        },
+      );
+      onChanged(response.task);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "We could not update that subtask.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteSubtask(subtask: SubtaskData) {
+    if (!window.confirm(`Delete subtask “${subtask.text}”?`)) return;
+    setSaving(true);
+    try {
+      const response = await apiRequest<TaskResponse>(
+        taskUrl(project.id, task.id, `/subtasks/${subtask.id}`),
+        { method: "DELETE", body: "{}" },
+      );
+      onChanged(response.task);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "We could not delete that subtask.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addNote(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!noteBody.trim()) return;
+    setSaving(true);
+    try {
+      const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id, "/notes"), {
+        method: "POST",
+        body: JSON.stringify({ body: noteBody }),
+      });
+      setNoteBody("");
+      onChanged(response.task);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "We could not add that note.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function editNote(note: NonNullable<TaskData["notes"]>[number]) {
+    const body = window.prompt("Edit note Markdown", note.body);
+    if (body === null || !body.trim()) return;
+    setSaving(true);
+    try {
+      const response = await apiRequest<TaskResponse>(
+        taskUrl(project.id, task.id, `/notes/${note.id}`),
+        { method: "PATCH", body: JSON.stringify({ body }) },
+      );
+      onChanged(response.task);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "We could not edit that note.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteNote(note: NonNullable<TaskData["notes"]>[number]) {
+    if (!window.confirm("Delete this personal note?")) return;
+    setSaving(true);
+    try {
+      const response = await apiRequest<TaskResponse>(
+        taskUrl(project.id, task.id, `/notes/${note.id}`),
+        { method: "DELETE", body: "{}" },
+      );
+      onChanged(response.task);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "We could not delete that note.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function trash() {
+    if (
+      !window.confirm("Move this task to Trash? Its notes, subtasks, and history will be retained.")
+    )
+      return;
+    setSaving(true);
+    try {
+      const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id), {
+        method: "DELETE",
+        body: "{}",
+      });
+      onChanged(response.task);
+      onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "We could not move this task to Trash.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function restore() {
+    setSaving(true);
+    try {
+      const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id, "/restore"), {
+        method: "POST",
+        body: "{}",
+      });
+      onChanged(response.task);
+      onClose();
+    } catch (caught) {
+      if (
+        errorCode(caught) === "WIP_CONFIRMATION_REQUIRED" &&
+        window.confirm("The destination is at its WIP warning limit. Restore anyway?")
+      ) {
+        const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id, "/restore"), {
+          method: "POST",
+          body: JSON.stringify({ warningConfirmed: true }),
+        });
+        onChanged(response.task);
+        onClose();
+      } else {
+        setError(caught instanceof Error ? caught.message : "We could not restore this task.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function permanentlyDelete() {
+    const confirmation = window.prompt(
+      `Type the task title exactly to permanently delete “${task.title}”.`,
+    );
+    if (confirmation === null) return;
+    setSaving(true);
+    try {
+      await apiRequest(taskUrl(project.id, task.id, "/permanent-delete"), {
+        method: "POST",
+        body: JSON.stringify({ confirmation }),
+      });
+      onClose();
+      onChanged({ ...task, deletedAt: "deleted" });
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "We could not permanently delete this task.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="task-detail-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <aside
+        ref={panelRef}
+        className="task-detail-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="task-detail-title"
+        aria-describedby="task-detail-context"
+      >
+        <header className="task-detail-panel__header">
+          <div>
+            <p className="eyebrow">Task details</p>
+            <h2 id="task-detail-title">{task.title}</h2>
+            <p id="task-detail-context" className="task-detail-context">
+              {project.name} ·{" "}
+              {project.columns.find((column) => column.id === task.columnId)?.name ?? "Board"}
+            </p>
+          </div>
+          <button
+            ref={closeRef}
+            className="icon-button"
+            type="button"
+            aria-label="Close task details and return to board"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        {task.deletedAt ? (
+          <div className="task-trash-actions">
+            <p>This task is in Trash. Its planning history is retained until permanent deletion.</p>
+            <div className="dialog-actions">
+              <Button variant="primary" onClick={() => void restore()} disabled={saving}>
+                Restore task
+              </Button>
+              <button
+                className="ui-button ui-button--destructive"
+                type="button"
+                onClick={() => void permanentlyDelete()}
+                disabled={saving}
+              >
+                Delete permanently
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <form className="task-detail-form" onSubmit={(event) => void save(event)}>
+              <label className="field" htmlFor="task-title">
+                Title
+                <input
+                  id="task-title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  maxLength={240}
+                  required
+                />
+              </label>
+              <label className="field" htmlFor="task-description">
+                Description{" "}
+                <span className="field-optional">Markdown, sanitized before storage</span>
+                <textarea
+                  id="task-description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  rows={6}
+                  maxLength={50000}
+                />
+              </label>
+              <div className="task-detail-grid">
+                <label className="field" htmlFor="task-column">
+                  Column
+                  <select
+                    id="task-column"
+                    value={columnId}
+                    onChange={(event) => setColumnId(event.target.value)}
+                  >
+                    {project.columns.map((column) => (
+                      <option value={column.id} key={column.id}>
+                        {column.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field" htmlFor="task-swimlane">
+                  Swimlane
+                  <select
+                    id="task-swimlane"
+                    value={swimlaneId}
+                    onChange={(event) => setSwimlaneId(event.target.value)}
+                  >
+                    <option value="">No swimlane</option>
+                    {project.swimlanes.map((lane) => (
+                      <option value={lane.id} key={lane.id}>
+                        {lane.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field" htmlFor="task-due-date">
+                  Due date <span className="field-optional">Calendar date</span>
+                  <input
+                    id="task-due-date"
+                    type="date"
+                    value={dueDate}
+                    onChange={(event) => setDueDate(event.target.value)}
+                  />
+                </label>
+                <label className="field" htmlFor="task-color">
+                  Card color
+                  <input
+                    id="task-color"
+                    type="color"
+                    value={color}
+                    onChange={(event) => setColor(event.target.value)}
+                  />
+                </label>
+              </div>
+              <fieldset className="task-label-picker">
+                <legend>Labels</legend>
+                <div className="task-label-picker__options">
+                  {project.labels.map((label) => (
+                    <label key={label.id}>
+                      <input
+                        type="checkbox"
+                        checked={labelIds.includes(label.id)}
+                        onChange={(event) =>
+                          setLabelIds((current) =>
+                            event.target.checked
+                              ? [...current, label.id]
+                              : current.filter((id) => id !== label.id),
+                          )
+                        }
+                      />
+                      {label.name}
+                    </label>
+                  ))}
+                  {project.labels.length === 0 && (
+                    <span className="field-help">Create board labels below.</span>
+                  )}
+                </div>
+              </fieldset>
+              <div className="markdown-preview">
+                <p className="eyebrow">Preview</p>
+                <MarkdownPreview value={description} />
+              </div>
+              <div className="dialog-actions">
+                <Button variant="primary" type="submit" disabled={saving}>
+                  {saving ? "Saving…" : "Save details"}
+                </Button>
+                <button
+                  className="ui-button ui-button--destructive"
+                  type="button"
+                  onClick={() => void trash()}
+                  disabled={saving}
+                >
+                  Move to Trash
+                </button>
+              </div>
+            </form>
+            <section className="task-detail-section" aria-labelledby="subtasks-title">
+              <div className="task-section-heading">
+                <h3 id="subtasks-title">Subtasks</h3>
+                <span>
+                  {task.completedSubtaskCount ??
+                    task.subtasks?.filter((item) => item.completed).length ??
+                    0}
+                  /{task.subtaskCount ?? task.subtasks?.length ?? 0}
+                </span>
+              </div>
+              <ul className="subtask-list">
+                {(task.subtasks ?? []).map((subtask) => (
+                  <li key={subtask.id}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={subtask.completed}
+                        onChange={() => void toggleSubtask(subtask)}
+                      />{" "}
+                      <span className={subtask.completed ? "is-complete" : undefined}>
+                        {subtask.text}
+                      </span>
+                    </label>
+                    <button
+                      className="text-button text-button--danger"
+                      type="button"
+                      onClick={() => void deleteSubtask(subtask)}
+                      disabled={saving}
+                    >
+                      Delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <form className="compact-form" onSubmit={(event) => void addSubtask(event)}>
+                <label className="sr-only" htmlFor="new-subtask">
+                  New subtask
+                </label>
+                <input
+                  id="new-subtask"
+                  value={subtaskText}
+                  onChange={(event) => setSubtaskText(event.target.value)}
+                  placeholder="Add a checklist item"
+                  maxLength={500}
+                />
+                <button
+                  className="ui-button ui-button--secondary"
+                  type="submit"
+                  disabled={saving || !subtaskText.trim()}
+                >
+                  Add
+                </button>
+              </form>
+            </section>
+            <section className="task-detail-section" aria-labelledby="notes-title">
+              <div className="task-section-heading">
+                <h3 id="notes-title">Notes</h3>
+                <span>Chronological journal</span>
+              </div>
+              <ol className="task-notes">
+                {(task.notes ?? []).map((note) => (
+                  <li key={note.id}>
+                    <div
+                      className="markdown-content"
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(note.body) }}
+                    />
+                    <time dateTime={note.createdAt}>
+                      {new Date(note.createdAt).toLocaleString()}
+                    </time>
+                    <div className="task-note-actions">
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() => void editNote(note)}
+                        disabled={saving}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="text-button text-button--danger"
+                        type="button"
+                        onClick={() => void deleteNote(note)}
+                        disabled={saving}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <form className="task-note-form" onSubmit={(event) => void addNote(event)}>
+                <label className="field" htmlFor="new-note">
+                  Add a note
+                  <textarea
+                    id="new-note"
+                    value={noteBody}
+                    onChange={(event) => setNoteBody(event.target.value)}
+                    rows={3}
+                    maxLength={20000}
+                  />
+                </label>
+                <button
+                  className="ui-button ui-button--secondary"
+                  type="submit"
+                  disabled={saving || !noteBody.trim()}
+                >
+                  Add note
+                </button>
+              </form>
+            </section>
+          </>
+        )}
+        <p className="task-detail-help">
+          Press Escape to close. All board actions also have keyboard and touch-sized controls.
+        </p>
+      </aside>
+    </div>
+  );
+}
+
+export function TaskBoard({ project }: { project: BoardProject }) {
+  const [tasks, setTasks] = useState<TaskData[]>([]);
+  const [selectedColumnId, setSelectedColumnId] = useState(project.columns[0]?.id);
+  const [selectedSwimlaneId, setSelectedSwimlaneId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [labelId, setLabelId] = useState("");
+  const [color, setColor] = useState("");
+  const [due, setDue] = useState("");
+  const [columnFilter, setColumnFilter] = useState("");
+  const [swimlaneFilter, setSwimlaneFilter] = useState("");
+  const [showTrash, setShowTrash] = useState(false);
+  const [pending, setPending] = useState(true);
+  const [error, setError] = useState<string>();
+  const [detail, setDetail] = useState<{ task: TaskData; trigger: HTMLElement | null }>();
+  const [draggedTaskId, setDraggedTaskId] = useState<string>();
+  const detailHistoryEntry = useRef(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const loadTasks = useCallback(async () => {
+    setPending(true);
+    try {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set("search", search.trim());
+      if (labelId) params.set("labelId", labelId);
+      if (color) params.set("color", color);
+      if (due) params.set("due", due);
+      if (columnFilter) params.set("columnId", columnFilter);
+      if (swimlaneFilter) params.set("swimlaneId", swimlaneFilter);
+      if (showTrash) params.set("trash", "true");
+      const response = await apiRequest<TaskListResponse>(
+        `/api/projects/${project.id}/tasks?${params}`,
+      );
+      setTasks(response.tasks);
+      setError(undefined);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "We could not load the tasks.");
+    } finally {
+      setPending(false);
+    }
+  }, [color, columnFilter, due, labelId, project.id, search, showTrash, swimlaneFilter]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadTasks(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadTasks]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (detailHistoryEntry.current) {
+        detailHistoryEntry.current = false;
+        setDetail(undefined);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.isContentEditable ||
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT"
+      ) {
+        return;
+      }
+      if (event.key === "/") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (event.key.toLowerCase() === "n" && !showTrash) {
+        event.preventDefault();
+        document.querySelector<HTMLInputElement>("input[id^=quick-create-]")?.focus();
+      }
+    };
+    window.addEventListener("keydown", onShortcut);
+    return () => window.removeEventListener("keydown", onShortcut);
+  }, [showTrash]);
+
+  const visibleColumns = useMemo(
+    () => project.columns.filter((column) => !columnFilter || column.id === columnFilter),
+    [columnFilter, project.columns],
+  );
+  const activeColumn =
+    selectedColumnId && visibleColumns.some((column) => column.id === selectedColumnId)
+      ? selectedColumnId
+      : visibleColumns[0]?.id;
+  const availableColors = useMemo(
+    () => [
+      ...new Set([
+        ...tasks.map((task) => task.color).filter((value): value is string => Boolean(value)),
+        ...project.labels.map((label) => label.color),
+      ]),
+    ],
+    [project.labels, tasks],
+  );
+
+  function openTask(task: TaskData, trigger: HTMLElement) {
+    window.history.pushState(
+      { ...(window.history.state ?? {}), taskDetails: true },
+      "",
+      window.location.href,
+    );
+    detailHistoryEntry.current = true;
+    setDetail({ task, trigger });
+  }
+
+  const closeDetails = useCallback(() => {
+    setDetail(undefined);
+    if (detailHistoryEntry.current) {
+      detailHistoryEntry.current = false;
+      window.history.back();
+    }
+  }, []);
+
+  function changedTask(task: TaskData) {
+    setDetail((current) => (current ? { ...current, task } : current));
+    void loadTasks();
+  }
+
+  async function create(
+    title: string,
+    details: boolean,
+    columnId: string,
+    swimlaneId: string | null,
+  ) {
+    try {
+      const response = await apiRequest<TaskResponse>(`/api/projects/${project.id}/tasks`, {
+        method: "POST",
+        body: JSON.stringify({ title, columnId, swimlaneId }),
+      });
+      if (details) openTask(response.task, document.activeElement as HTMLElement);
+      await loadTasks();
+    } catch (caught) {
+      if (
+        errorCode(caught) === "WIP_CONFIRMATION_REQUIRED" &&
+        window.confirm("This column is at its WIP warning limit. Add the task anyway?")
+      ) {
+        const response = await apiRequest<TaskResponse>(`/api/projects/${project.id}/tasks`, {
+          method: "POST",
+          body: JSON.stringify({ title, columnId, swimlaneId, warningConfirmed: true }),
+        });
+        if (details) openTask(response.task, document.activeElement as HTMLElement);
+        await loadTasks();
+      } else setError(caught instanceof Error ? caught.message : "We could not create that task.");
+    }
+  }
+
+  async function move(
+    task: TaskData,
+    columnId: string,
+    swimlaneId: string | null,
+    position?: number,
+    warningConfirmed = false,
+  ) {
+    try {
+      const response = await apiRequest<TaskResponse>(taskUrl(project.id, task.id, "/move"), {
+        method: "POST",
+        body: JSON.stringify({ columnId, swimlaneId, position, warningConfirmed }),
+      });
+      changedTask(response.task);
+    } catch (caught) {
+      if (
+        errorCode(caught) === "WIP_CONFIRMATION_REQUIRED" &&
+        window.confirm("This move reaches the column WIP warning. Move it anyway?")
+      ) {
+        await move(task, columnId, swimlaneId, position, true);
+      } else setError(caught instanceof Error ? caught.message : "We could not move that task.");
+    }
+  }
+
+  function dropOnColumn(event: DragEvent<HTMLElement>, columnId: string) {
+    event.preventDefault();
+    const taskId = event.dataTransfer.getData("text/task-id") || draggedTaskId;
+    const task = tasks.find((item) => item.id === taskId);
+    if (task) void move(task, columnId, task.swimlaneId);
+    setDraggedTaskId(undefined);
+  }
+
+  function dropOnTask(event: DragEvent<HTMLElement>, target: TaskData) {
+    event.preventDefault();
+    const taskId = event.dataTransfer.getData("text/task-id") || draggedTaskId;
+    const task = tasks.find((item) => item.id === taskId);
+    if (task && task.id !== target.id)
+      void move(task, target.columnId, target.swimlaneId, target.position);
+    setDraggedTaskId(undefined);
+  }
+
+  return (
+    <>
+      <section className="task-board-tools" aria-labelledby="task-board-tools-title">
+        <div className="task-board-tools__heading">
+          <div>
+            <p className="eyebrow">Phase 3 execution</p>
+            <h2 id="task-board-tools-title">Plan and move your work</h2>
+          </div>
+          <div className="task-board-view-toggle" role="group" aria-label="Task view">
+            <button
+              className={!showTrash ? "is-selected" : ""}
+              type="button"
+              onClick={() => setShowTrash(false)}
+            >
+              Board
+            </button>
+            <button
+              className={showTrash ? "is-selected" : ""}
+              type="button"
+              onClick={() => setShowTrash(true)}
+            >
+              Trash
+            </button>
+          </div>
+        </div>
+        <div className="task-filter-grid">
+          <label className="field task-search-field" htmlFor="task-search">
+            Search tasks, notes, and subtasks
+            <input
+              ref={searchInputRef}
+              id="task-search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search…"
+            />
+          </label>
+          <label className="field" htmlFor="task-label-filter">
+            Label
+            <select
+              id="task-label-filter"
+              value={labelId}
+              onChange={(event) => setLabelId(event.target.value)}
+            >
+              <option value="">All labels</option>
+              {project.labels.map((label) => (
+                <option value={label.id} key={label.id}>
+                  {label.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field" htmlFor="task-color-filter">
+            Color
+            <select
+              id="task-color-filter"
+              value={color}
+              onChange={(event) => setColor(event.target.value)}
+            >
+              <option value="">All colors</option>
+              {availableColors.map((value) => (
+                <option value={value} key={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field" htmlFor="task-due-filter">
+            Due date
+            <select
+              id="task-due-filter"
+              value={due}
+              onChange={(event) => setDue(event.target.value)}
+            >
+              <option value="">Any due date</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Due today</option>
+              <option value="this-week">This week</option>
+              <option value="no-date">No due date</option>
+              <option value="has-date">Has due date</option>
+            </select>
+          </label>
+          <label className="field" htmlFor="task-column-filter">
+            Column
+            <select
+              id="task-column-filter"
+              value={columnFilter}
+              onChange={(event) => {
+                setColumnFilter(event.target.value);
+                setSelectedColumnId(event.target.value || project.columns[0]?.id);
+              }}
+            >
+              <option value="">All columns</option>
+              {project.columns.map((column) => (
+                <option value={column.id} key={column.id}>
+                  {column.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field" htmlFor="task-swimlane-filter">
+            Swimlane
+            <select
+              id="task-swimlane-filter"
+              value={swimlaneFilter}
+              onChange={(event) => setSwimlaneFilter(event.target.value)}
+            >
+              <option value="">All swimlanes</option>
+              <option value="none">No swimlane</option>
+              {project.swimlanes.map((lane) => (
+                <option value={lane.id} key={lane.id}>
+                  {lane.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="task-board-hint" aria-live="polite">
+          {showTrash
+            ? "Trash keeps task history until you deliberately delete it permanently."
+            : "Drag is optional. Use Move to…, the arrow buttons, or the task details panel with keyboard or touch."}
+        </p>
+      </section>
+      {error && (
+        <p className="inline-alert" role="alert">
+          {error}{" "}
+          <button className="text-button" type="button" onClick={() => void loadTasks()}>
+            Try again
+          </button>
+        </p>
+      )}
+      {pending ? (
+        <div className="loading-panel" role="status">
+          Loading tasks…
+        </div>
+      ) : showTrash ? (
+        <section className="trash-board" aria-labelledby="trash-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Recoverable history</p>
+              <h2 id="trash-title">Trash</h2>
+            </div>
+            <span className="section-count">{tasks.length}</span>
+          </div>
+          {tasks.length === 0 ? (
+            <div className="empty-panel">
+              <h3>Trash is empty</h3>
+              <p>
+                Deleted tasks will stay here until you restore or deliberately permanently delete
+                them.
+              </p>
+            </div>
+          ) : (
+            <div className="trash-list" role="list" aria-label="Tasks in Trash">
+              {tasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  project={project}
+                  onOpen={openTask}
+                  onMove={() => undefined}
+                  onDropOnTask={() => undefined}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
+        <>
+          <div className="mobile-task-column-picker">
+            <label className="field" htmlFor="task-mobile-column">
+              Show column on mobile
+              <select
+                id="task-mobile-column"
+                value={activeColumn ?? ""}
+                onChange={(event) => setSelectedColumnId(event.target.value)}
+              >
+                {visibleColumns.map((column) => (
+                  <option value={column.id} key={column.id}>
+                    {column.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field" htmlFor="task-mobile-swimlane">
+              Capture swimlane
+              <select
+                id="task-mobile-swimlane"
+                value={selectedSwimlaneId ?? ""}
+                onChange={(event) => setSelectedSwimlaneId(event.target.value || null)}
+              >
+                <option value="">No swimlane</option>
+                {project.swimlanes.map((lane) => (
+                  <option value={lane.id} key={lane.id}>
+                    {lane.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <section className="task-board-columns" aria-label="Task board">
+            {visibleColumns.map((column) => {
+              const columnTasks = tasks.filter((task) => task.columnId === column.id);
+              return (
+                <article
+                  className={`task-board-column ${column.id === activeColumn ? "task-board-column--mobile-active" : ""}`}
+                  key={column.id}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => dropOnColumn(event, column.id)}
+                  aria-labelledby={`task-column-${column.id}`}
+                >
+                  <header className="task-board-column__header">
+                    <div>
+                      <p className="column-role">{column.role}</p>
+                      <h3 id={`task-column-${column.id}`}>{column.name}</h3>
+                    </div>
+                    <span
+                      className="column-count"
+                      aria-label={`${columnTasks.length} visible tasks`}
+                    >
+                      {columnTasks.length}
+                    </span>
+                  </header>
+                  <div className="board-column__meta">
+                    <span className={`wip-badge wip-badge--${column.wipMode}`}>
+                      WIP {column.wipMode}
+                      {column.wipLimit ? ` · ${column.wipLimit}` : ""}
+                    </span>
+                    {column.role === "active" && (
+                      <StatusBadge status="success">Focus destination</StatusBadge>
+                    )}
+                    {column.role === "completed" && (
+                      <StatusBadge status="neutral">Completion meaning</StatusBadge>
+                    )}
+                  </div>
+                  <QuickCreate
+                    columnId={column.id}
+                    swimlaneId={selectedSwimlaneId}
+                    disabled={project.status === "archived"}
+                    onCreate={create}
+                  />
+                  <div
+                    className="task-card-list"
+                    role="list"
+                    aria-label={`Tasks in ${column.name}`}
+                  >
+                    {columnTasks.map((task) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        project={project}
+                        onOpen={openTask}
+                        onMove={(item, destination, lane, position) =>
+                          void move(item, destination, lane, position)
+                        }
+                        onDropOnTask={dropOnTask}
+                      />
+                    ))}
+                    {columnTasks.length === 0 && (
+                      <p className="task-board-empty" role="listitem">
+                        Drop a task here or add one above.
+                      </p>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        </>
+      )}
+      {detail && (
+        <TaskDetails
+          project={project}
+          task={detail.task}
+          trigger={detail.trigger}
+          onClose={closeDetails}
+          onChanged={changedTask}
+        />
+      )}
+    </>
+  );
+}

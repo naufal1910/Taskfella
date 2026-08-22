@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   index,
   type AnyPgColumn,
   integer,
@@ -332,6 +333,7 @@ export const columns = pgTable(
   (table) => [
     index("columns_project_position_idx").on(table.projectId, table.position),
     index("columns_project_role_idx").on(table.projectId, table.role),
+    uniqueIndex("columns_id_project_unique").on(table.id, table.projectId),
     uniqueIndex("columns_one_active_per_project_unique")
       .on(table.projectId)
       .where(sql`${table.role} = 'active'`),
@@ -369,6 +371,7 @@ export const swimlanes = pgTable(
   },
   (table) => [
     index("swimlanes_project_position_idx").on(table.projectId, table.position),
+    uniqueIndex("swimlanes_id_project_unique").on(table.id, table.projectId),
     check("swimlanes_name_length_check", sql`length(trim(${table.name})) BETWEEN 1 AND 80`),
     check("swimlanes_position_nonnegative_check", sql`${table.position} >= 0`),
   ],
@@ -390,6 +393,7 @@ export const labels = pgTable(
   },
   (table) => [
     uniqueIndex("labels_project_normalized_name_unique").on(table.projectId, table.normalizedName),
+    uniqueIndex("labels_id_project_unique").on(table.id, table.projectId),
     index("labels_project_position_idx").on(table.projectId, table.position),
     check("labels_name_length_check", sql`length(trim(${table.name})) BETWEEN 1 AND 60`),
     check(
@@ -431,6 +435,185 @@ export const projectLifecycleEvents = pgTable(
   ],
 );
 
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").notNull(),
+    columnId: uuid("column_id").notNull(),
+    swimlaneId: uuid("swimlane_id"),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    color: text("color"),
+    dueDate: date("due_date", { mode: "string" }),
+    position: integer("position").notNull().default(0),
+    revision: integer("revision").notNull().default(0),
+    completedAt: utcTimestamp("completed_at"),
+    deletedAt: utcTimestamp("deleted_at"),
+    restoreColumnId: uuid("restore_column_id"),
+    restoreSwimlaneId: uuid("restore_swimlane_id"),
+    restorePosition: integer("restore_position"),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+    updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("tasks_id_project_account_unique").on(table.id, table.projectId, table.accountId),
+    index("tasks_project_column_lane_order_idx").on(
+      table.projectId,
+      table.columnId,
+      table.swimlaneId,
+      table.position,
+    ),
+    index("tasks_account_deleted_updated_idx").on(
+      table.accountId,
+      table.deletedAt,
+      table.updatedAt,
+    ),
+    index("tasks_project_due_date_idx").on(table.projectId, table.dueDate),
+    uniqueIndex("tasks_active_location_position_unique")
+      .on(
+        table.projectId,
+        table.columnId,
+        sql`coalesce(${table.swimlaneId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
+        table.position,
+      )
+      .where(sql`${table.deletedAt} IS NULL`),
+    check("tasks_title_length_check", sql`length(trim(${table.title})) BETWEEN 1 AND 240`),
+    check("tasks_description_length_check", sql`length(${table.description}) <= 50000`),
+    check(
+      "tasks_color_hex_check",
+      sql`${table.color} IS NULL OR ${table.color} ~ '^#[0-9A-Fa-f]{6}$'`,
+    ),
+    check("tasks_position_nonnegative_check", sql`${table.position} >= 0`),
+    check("tasks_revision_nonnegative_check", sql`${table.revision} >= 0`),
+    check(
+      "tasks_restore_position_check",
+      sql`${table.restorePosition} IS NULL OR ${table.restorePosition} >= 0`,
+    ),
+    foreignKey({
+      columns: [table.projectId, table.accountId],
+      foreignColumns: [projects.id, projects.accountId],
+      name: "tasks_project_owner_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.columnId, table.projectId],
+      foreignColumns: [columns.id, columns.projectId],
+      name: "tasks_column_project_fk",
+    }),
+    foreignKey({
+      columns: [table.swimlaneId, table.projectId],
+      foreignColumns: [swimlanes.id, swimlanes.projectId],
+      name: "tasks_swimlane_project_fk",
+    }),
+  ],
+);
+
+export const taskLabels = pgTable(
+  "task_labels",
+  {
+    taskId: uuid("task_id").notNull(),
+    labelId: uuid("label_id").notNull(),
+    projectId: uuid("project_id").notNull(),
+    accountId: uuid("account_id").notNull(),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("task_labels_task_label_unique").on(table.taskId, table.labelId),
+    index("task_labels_project_label_idx").on(table.projectId, table.labelId),
+    foreignKey({
+      columns: [table.taskId, table.projectId, table.accountId],
+      foreignColumns: [tasks.id, tasks.projectId, tasks.accountId],
+      name: "task_labels_task_owner_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.labelId, table.projectId],
+      foreignColumns: [labels.id, labels.projectId],
+      name: "task_labels_label_project_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const subtasks = pgTable(
+  "subtasks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id").notNull(),
+    projectId: uuid("project_id").notNull(),
+    accountId: uuid("account_id").notNull(),
+    text: text("text").notNull(),
+    completed: boolean("completed").notNull().default(false),
+    position: integer("position").notNull().default(0),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+    updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("subtasks_task_position_idx").on(table.taskId, table.position),
+    uniqueIndex("subtasks_task_id_unique").on(table.id, table.taskId),
+    check("subtasks_text_length_check", sql`length(trim(${table.text})) BETWEEN 1 AND 500`),
+    check("subtasks_position_nonnegative_check", sql`${table.position} >= 0`),
+    foreignKey({
+      columns: [table.taskId, table.projectId, table.accountId],
+      foreignColumns: [tasks.id, tasks.projectId, tasks.accountId],
+      name: "subtasks_task_owner_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const notes = pgTable(
+  "notes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id").notNull(),
+    projectId: uuid("project_id").notNull(),
+    accountId: uuid("account_id").notNull(),
+    body: text("body").notNull(),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+    updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("notes_task_chronological_idx").on(table.taskId, table.createdAt, table.id),
+    uniqueIndex("notes_id_task_unique").on(table.id, table.taskId),
+    check("notes_body_length_check", sql`length(trim(${table.body})) BETWEEN 1 AND 20000`),
+    foreignKey({
+      columns: [table.taskId, table.projectId, table.accountId],
+      foreignColumns: [tasks.id, tasks.projectId, tasks.accountId],
+      name: "notes_task_owner_fk",
+    }).onDelete("cascade"),
+  ],
+);
+
+export const taskLifecycleEvents = pgTable(
+  "task_lifecycle_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id").notNull(),
+    projectId: uuid("project_id").notNull(),
+    accountId: uuid("account_id").notNull(),
+    event: text("event").notNull(),
+    fromColumnId: uuid("from_column_id"),
+    toColumnId: uuid("to_column_id"),
+    fromSwimlaneId: uuid("from_swimlane_id"),
+    toSwimlaneId: uuid("to_swimlane_id"),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("task_lifecycle_events_task_created_idx").on(table.taskId, table.createdAt),
+    index("task_lifecycle_events_account_created_idx").on(table.accountId, table.createdAt),
+    foreignKey({
+      columns: [table.taskId, table.projectId, table.accountId],
+      foreignColumns: [tasks.id, tasks.projectId, tasks.accountId],
+      name: "task_lifecycle_events_task_owner_fk",
+    }).onDelete("cascade"),
+    check(
+      "task_lifecycle_events_event_value_check",
+      sql`${table.event} IN ('created', 'moved', 'completed', 'reopened', 'trashed', 'restored')`,
+    ),
+  ],
+);
+
 export const foundationSchema = {
   accounts,
   passwordCredentials,
@@ -445,6 +628,11 @@ export const foundationSchema = {
   swimlanes,
   labels,
   projectLifecycleEvents,
+  tasks,
+  taskLabels,
+  subtasks,
+  notes,
+  taskLifecycleEvents,
 } as const;
 
 export type Account = typeof accounts.$inferSelect;
@@ -462,3 +650,9 @@ export type ProjectColumn = typeof columns.$inferSelect;
 export type Swimlane = typeof swimlanes.$inferSelect;
 export type Label = typeof labels.$inferSelect;
 export type ProjectLifecycleEvent = typeof projectLifecycleEvents.$inferSelect;
+export type Task = typeof tasks.$inferSelect;
+export type NewTask = typeof tasks.$inferInsert;
+export type TaskLabel = typeof taskLabels.$inferSelect;
+export type Subtask = typeof subtasks.$inferSelect;
+export type Note = typeof notes.$inferSelect;
+export type TaskLifecycleEvent = typeof taskLifecycleEvents.$inferSelect;

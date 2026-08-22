@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { type Database } from "@/server/db/client";
 import {
   columns,
@@ -6,6 +6,8 @@ import {
   projectLifecycleEvents,
   projects,
   swimlanes,
+  taskLifecycleEvents,
+  tasks,
   type Label,
   type Project,
   type ProjectColumn,
@@ -45,6 +47,9 @@ import {
 
 type ProjectTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type ProjectDatabase = Database | ProjectTransaction;
+
+const TEMP_TASK_POSITION = 2_000_000_000;
+const TASK_REORDER_POSITION = 1_900_000_000;
 
 export interface ProjectSnapshot {
   project: Project;
@@ -568,6 +573,50 @@ async function applyColumnDrafts(
       })
       .where(and(eq(columns.id, draft.id), eq(columns.projectId, project.id)));
   }
+
+  // A workflow role change is also a task-state change. Reconcile active board
+  // tasks in the same transaction so a completed boundary never drifts from
+  // the column semantics that define it. Trash remains recoverable and is
+  // reconciled when it is restored.
+  for (const oldColumn of current) {
+    const next = normalized.find((column) => column.id === oldColumn.id);
+    if (!next || !completionMeaningChanges(oldColumn.role as ColumnRole, next.role)) continue;
+    const completionNow = next.role === "completed";
+    const affected = await tx
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.projectId, project.id),
+          eq(tasks.columnId, oldColumn.id),
+          isNull(tasks.deletedAt),
+        ),
+      )
+      .for("update");
+    if (affected.length > 0) {
+      await tx
+        .update(tasks)
+        .set({ completedAt: completionNow ? now : null, updatedAt: now })
+        .where(
+          inArray(
+            tasks.id,
+            affected.map((task) => task.id),
+          ),
+        );
+      await tx.insert(taskLifecycleEvents).values(
+        affected.map((task) => ({
+          taskId: task.id,
+          projectId: project.id,
+          accountId: project.accountId,
+          event: completionNow ? "completed" : "reopened",
+          fromColumnId: oldColumn.id,
+          toColumnId: oldColumn.id,
+          createdAt: now,
+        })),
+      );
+    }
+  }
+
   await tx
     .update(projects)
     .set({ revision: sql`${projects.revision} + 1`, updatedAt: now })
@@ -752,6 +801,39 @@ export async function deleteColumn(
     const remaining = current.filter((column) => column.id !== normalizedColumnId);
     const target = remaining.map((column, position) => draftFromColumn(column, {}, position));
     validateColumnDrafts(target);
+    const [activeTaskCount] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.projectId, project.id),
+          eq(tasks.columnId, normalizedColumnId),
+          isNull(tasks.deletedAt),
+        ),
+      );
+    if (Number(activeTaskCount?.count ?? 0) > 0) throw new AppError("COLUMN_NOT_EMPTY");
+
+    // Trashed tasks retain their restoreColumnId even when the original
+    // column is removed. Move only their hidden current location to a stable
+    // non-completed fallback so the FK remains valid and restore can choose a
+    // deterministic destination later.
+    const fallback = target.find((column) => column.role !== "completed") ?? target[0];
+    if (!fallback) throw new AppError("BOARD_INVARIANT_VIOLATION");
+    await tx
+      .update(tasks)
+      .set({
+        columnId: fallback.id,
+        swimlaneId: null,
+        position: TEMP_TASK_POSITION,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(tasks.projectId, project.id),
+          eq(tasks.columnId, normalizedColumnId),
+          isNotNull(tasks.deletedAt),
+        ),
+      );
     await tx
       .delete(columns)
       .where(and(eq(columns.id, normalizedColumnId), eq(columns.projectId, projectId)));
@@ -882,6 +964,36 @@ export async function reorderSwimlanes(
   });
 }
 
+async function compactUnswimlanedTasks(
+  tx: ProjectTransaction,
+  projectId: string,
+  columnId: string,
+  now: Date,
+): Promise<void> {
+  const rows = await tx
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.projectId, projectId),
+        eq(tasks.columnId, columnId),
+        isNull(tasks.swimlaneId),
+        isNull(tasks.deletedAt),
+      ),
+    )
+    .orderBy(asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
+    .for("update");
+  for (const [index, task] of rows.entries()) {
+    await tx
+      .update(tasks)
+      .set({ position: TASK_REORDER_POSITION - index, updatedAt: now })
+      .where(eq(tasks.id, task.id));
+  }
+  for (const [position, task] of rows.entries()) {
+    await tx.update(tasks).set({ position, updatedAt: now }).where(eq(tasks.id, task.id));
+  }
+}
+
 export async function deleteSwimlane(
   db: Database,
   accountId: string,
@@ -900,8 +1012,33 @@ export async function deleteSwimlane(
       .where(and(eq(swimlanes.id, normalizedSwimlaneId), eq(swimlanes.projectId, projectId)))
       .for("update");
     if (!lane) throw new AppError("NOT_FOUND");
-    // Tasks are introduced in Phase 3. Until then every lane is empty by the
-    // workflow boundary, so deletion cannot silently discard task state.
+    // Active tasks lose their optional lane; trashed tasks keep their
+    // restoreSwimlaneId metadata so restore can fall back deterministically.
+    const activeLaneTasks = await tx
+      .select({ id: tasks.id, columnId: tasks.columnId })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.projectId, projectId),
+          eq(tasks.swimlaneId, normalizedSwimlaneId),
+          isNull(tasks.deletedAt),
+        ),
+      )
+      .orderBy(asc(tasks.position), asc(tasks.createdAt), asc(tasks.id))
+      .for("update");
+    for (const [index, task] of activeLaneTasks.entries()) {
+      await tx
+        .update(tasks)
+        .set({ position: TEMP_TASK_POSITION - index, updatedAt: now })
+        .where(eq(tasks.id, task.id));
+    }
+    await tx
+      .update(tasks)
+      .set({ swimlaneId: null, updatedAt: now })
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.swimlaneId, normalizedSwimlaneId)));
+    for (const columnId of new Set(activeLaneTasks.map((task) => task.columnId))) {
+      await compactUnswimlanedTasks(tx, projectId, columnId, now);
+    }
     await tx
       .delete(swimlanes)
       .where(and(eq(swimlanes.id, normalizedSwimlaneId), eq(swimlanes.projectId, projectId)));

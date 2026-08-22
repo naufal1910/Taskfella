@@ -8,10 +8,10 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - `README.md` is the contributor quick start and command reference.
 - `DESIGN.md` is the canonical visual contract; its validator command and zero-error/zero-warning requirement are documented in `CONTRIBUTING.md`.
-- `docs/implementation/taskfella-analysis.md` is the approved phased implementation plan; `docs/implementation/taskfella-phase1a-auth.md`, `docs/implementation/taskfella-phase1b-auth.md`, `docs/implementation/taskfella-phase1c-google-oauth.md`, `docs/implementation/taskfella-phase1d-settings.md`, and `docs/implementation/taskfella-phase1e-verification.md` record authentication, OAuth/linking, account-settings security decisions, and integrated verification evidence.
-- `src/server/db/schema.ts` and ordered `drizzle/` migrations are the source of truth for authentication, OAuth-ceremony, account-settings, and Phase 2 project/workflow tables; Phase 2 domain behavior lives in `src/server/modules/projects/service.ts` and `src/server/modules/workflow/wip.ts`.
+- `docs/implementation/taskfella-analysis.md` is the approved phased implementation plan; the `docs/implementation/taskfella-phase1*.md`, `docs/implementation/taskfella-phase2-projects-boards.md`, and `docs/implementation/taskfella-phase3-tasks.md` records preserve authentication, OAuth/linking, account-settings security, workflow, task-boundary, and integrated verification decisions.
+- `src/server/db/schema.ts` and ordered `drizzle/` migrations are the source of truth for authentication, OAuth-ceremony, account-settings, Phase 2 project/workflow tables, and Phase 3 task data; Phase 2/3 domain behavior lives in `src/server/modules/projects/service.ts`, `src/server/modules/workflow/wip.ts`, and `src/server/modules/tasks/service.ts`. Markdown storage/rendering is bounded by `src/server/modules/tasks/markdown.ts`.
 - `GET /api/health` is the executable readiness contract; `pnpm db:migrate` must run before a healthy response is expected, including after a new migration.
-- Keep the application as a modular monolith. Do not add services, queues, caches, or deployment layers for later-phase behavior. Phase 2 deliberately stops at the workflow boundary; task execution, focus, analytics, exports, and collaboration remain later phases.
+- Keep the application as a modular monolith. Do not add services, queues, caches, or deployment layers for later-phase behavior. The current Phase 3 slice stops at task planning/board execution; focus, time tracking, analytics, exports, and collaboration remain later phases.
 
 ## Maintaining this file
 

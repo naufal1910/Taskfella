@@ -14,4 +14,11 @@ Foundation operational guidance is in the root [README](../README.md) and [CONTR
 - [Projects, boards, workflow, and WIP implementation record](implementation/taskfella-phase2-projects-boards.md)
 - [Phase 2 issue #4](https://github.com/naufal1910/Taskfella/issues/4)
 
-Phase 2 adds the account-owned board foundation only. Task execution, focus, analytics, exports, and collaboration remain later phases.
+Phase 2 adds the account-owned board foundation and transactional WIP boundary.
+
+## Phase 3 (implementation under review)
+
+- [Tasks and board execution implementation record](implementation/taskfella-phase3-tasks.md)
+- [Phase 3 issue #5](https://github.com/naufal1910/Taskfella/issues/5)
+
+Phase 3 adds account-isolated tasks, labels, subtasks, notes, ordering, movement, search/filtering, semantic completion, Trash, restore fallbacks, and responsive non-drag board execution. It is not marked delivered until its PR merges. Focus timers, time tracking, analytics, exports, and collaboration remain later phases.

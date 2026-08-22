@@ -20,7 +20,7 @@ Compose publishes PostgreSQL on host port `5433` (the container remains on port 
 - `200` and `status: "ok"` when the application is running and PostgreSQL has the latest required migration applied;
 - `503` and `status: "degraded"` when PostgreSQL is unavailable or the latest required migration has not been applied.
 
-The check is tied to the migration hash in `src/server/db/client.ts`, not merely to the existence of the Drizzle ledger or product tables. After Phase 2, this includes the account-owned projects, columns, swimlanes, labels, lifecycle events, workflow indexes, and deferred workflow-invariant triggers. Run `pnpm db:migrate` before relying on readiness after deploying the Phase 2 migration. This preserves the empty-ledger and stale-ledger failure behavior from Phase 0.
+The check is tied to the migration hash in `src/server/db/client.ts`, not merely to the existence of the Drizzle ledger or product tables. After Phase 3, this includes the account-owned projects/workflow tables, task data, task-label constraints, ordering indexes, lifecycle tables, and deferred workflow-invariant triggers. Run `pnpm db:migrate` before relying on readiness after deploying the new migration. This preserves the empty-ledger and stale-ledger failure behavior from Phase 0.
 
 Responses include request and correlation IDs for support while excluding connection strings, exception details, and user content.
 
@@ -42,9 +42,15 @@ Phase 2 uses the same single PostgreSQL database and authenticated session bound
 
 A project is created with the Personal Project, Simple, or Blank template. Blank is intentionally seeded with one active `In Progress` column and one completed `Done` column so it is valid before customization. Projects can be archived and restored without removing their columns, optional swimlanes, labels, or lifecycle events. Permanent deletion is available only through an explicit destructive request—the `/permanent-delete` endpoint or the resource `DELETE` alias—with the exact project name as confirmation.
 
-Workflow columns have one semantic role, an independent position, optional completed grouping, and column-level WIP mode/limit. The database has a partial unique active-column index plus a deferred PostgreSQL constraint trigger that checks exactly one active and at least one completed column at transaction commit. Server workflow mutations lock the owning project and use revision preconditions; a completion-role transition requires an explicit confirmation flag. The WIP policy is implemented in `src/server/modules/workflow/wip.ts` as the future Phase 3 task-move boundary: authoritative task counts must be read inside the same project-locked transaction, `warn` requires a confirmation retry, and `enforce` rejects overflow.
+Workflow columns have one semantic role, an independent position, optional completed grouping, and column-level WIP mode/limit. The database has a partial unique active-column index plus a deferred PostgreSQL constraint trigger that checks exactly one active and at least one completed column at transaction commit. Server workflow mutations lock the owning project and use revision preconditions; a completion-role transition requires an explicit confirmation flag. The WIP policy is implemented in `src/server/modules/workflow/wip.ts` and consumed by the Phase 3 task service: authoritative task counts are read inside the same project-locked transaction, `warn` requires a confirmation retry, and `enforce` rejects overflow.
 
-Phase 2 deliberately does not create task execution, focus, collaboration, sharing, assignees, timers, analytics, exports, or external credentials. The responsive board foundation is available at `/projects` and `/projects/:projectId`; desktop/tablet show a multi-column board and mobile provides one-column selection plus bottom navigation.
+## Tasks and board execution
+
+Phase 3 task routes and domain behavior are documented in [taskfella-phase3-tasks.md](implementation/taskfella-phase3-tasks.md). Task creation, movement, reorder, restore, and Trash operations derive account ownership from the authenticated session and use the project lock for transactional invariants. The `0009` migration adds task, label-join, subtask, note, and lifecycle tables without rewriting Phase 1/2 ancestry. Run `pnpm db:migrate` and `pnpm db:check` after deployment before serving task routes.
+
+Descriptions and notes pass through `src/server/modules/tasks/markdown.ts`; raw HTML, event handlers, scripts, and unsafe URL schemes are removed or escaped at both storage and rendering boundaries. Date-only due dates remain strings and are filtered using each account's timezone. Explicit Move to controls, position arrows, keyboard shortcuts, and mobile one-column selectors are first-class paths; desktop drag-and-drop is optional.
+
+Trash is reversible and retains child/history records. Permanent task deletion is a separate, exact-title-confirmed route available only for trashed tasks. Focus, time tracking, analytics, exports, collaboration, sharing, assignees, timers, and external credentials remain later phases.
 
 ## Google OAuth
 

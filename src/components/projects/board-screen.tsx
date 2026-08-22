@@ -2,15 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  type CSSProperties,
-  type FormEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { Button, StatusBadge, Surface } from "@/components/ui/primitives";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { Button, Surface } from "@/components/ui/primitives";
 import {
   apiRequest,
   type LabelData,
@@ -20,6 +13,7 @@ import {
 } from "./project-api";
 import { FocusDialog } from "./focus-dialog";
 import { ProjectNavigation } from "./project-navigation";
+import { TaskBoard } from "./task-board";
 
 type BoardProject = ProjectData & {
   columns: ProjectColumnData[];
@@ -62,45 +56,6 @@ function mergeColumnSnapshot(
     if (!currentIds.has(column.id)) merged.push(column);
   }
   return cloneColumns(merged);
-}
-
-function WipBadge({ column }: { column: ProjectColumnData }) {
-  if (column.wipMode === "none") return <span className="wip-badge">WIP none</span>;
-  return (
-    <span className={`wip-badge wip-badge--${column.wipMode}`}>
-      WIP {column.wipMode} · 0/{column.wipLimit}
-    </span>
-  );
-}
-
-function BoardColumn({ column, headingId }: { column: ProjectColumnData; headingId: string }) {
-  return (
-    <article className="board-column" aria-labelledby={headingId}>
-      <header className="board-column__header">
-        <div>
-          <p className="column-role">{column.role}</p>
-          <h3 id={headingId}>{column.name}</h3>
-        </div>
-        <span className="column-count" aria-label="No tasks">
-          0
-        </span>
-      </header>
-      <div className="board-column__meta">
-        <WipBadge column={column} />
-        {column.role === "active" && <StatusBadge status="success">Focus destination</StatusBadge>}
-        {column.role === "completed" && (
-          <StatusBadge status="neutral">Completion meaning</StatusBadge>
-        )}
-      </div>
-      <div className="board-empty" role="status">
-        <span className="board-empty__mark" aria-hidden="true">
-          ＋
-        </span>
-        <p>No tasks yet</p>
-        <small>This workflow is ready for Phase 3 task execution.</small>
-      </div>
-    </article>
-  );
 }
 
 function WorkflowEditor({
@@ -673,6 +628,7 @@ function BoardExtras({
 }) {
   const [laneName, setLaneName] = useState("");
   const [labelName, setLabelName] = useState("");
+  const [labelColor, setLabelColor] = useState("#0F766E");
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
 
@@ -683,11 +639,18 @@ function BoardExtras({
     try {
       const response = await apiRequest<ProjectResponse>(`/api/projects/${project.id}/${kind}`, {
         method: "POST",
-        body: JSON.stringify({ name: value, expectedRevision: project.revision }),
+        body: JSON.stringify({
+          name: value,
+          ...(kind === "labels" ? { color: labelColor } : {}),
+          expectedRevision: project.revision,
+        }),
       });
       onSaved(response.project);
       if (kind === "swimlanes") setLaneName("");
-      else setLabelName("");
+      else {
+        setLabelName("");
+        setLabelColor("#0F766E");
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "We could not save that board setting.");
     } finally {
@@ -764,6 +727,16 @@ function BoardExtras({
               onChange={(event) => setLabelName(event.target.value)}
               placeholder="New label"
             />
+            <label className="sr-only" htmlFor="new-label-color">
+              New label color
+            </label>
+            <input
+              id="new-label-color"
+              type="color"
+              value={labelColor}
+              onChange={(event) => setLabelColor(event.target.value)}
+              aria-label="New label color"
+            />
             <button
               className="ui-button ui-button--secondary"
               type="submit"
@@ -785,17 +758,12 @@ function BoardExtras({
 
 export function BoardScreen({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<BoardProject>();
-  const [selectedColumnId, setSelectedColumnId] = useState<string>();
   const [pending, setPending] = useState(true);
   const [error, setError] = useState<string>();
   const router = useRouter();
 
   const applyProjectSnapshot = useCallback((next: ProjectData): void => {
-    const nextColumns = next.columns ?? [];
     setProject(next as BoardProject);
-    setSelectedColumnId((current) =>
-      current && nextColumns.some((column) => column.id === current) ? current : nextColumns[0]?.id,
-    );
   }, []);
 
   async function load() {
@@ -848,10 +816,6 @@ export function BoardScreen({ projectId }: { projectId: string }) {
     };
   }, [applyProjectSnapshot, projectId, router]);
 
-  const selected = useMemo(
-    () => project?.columns.find((column) => column.id === selectedColumnId),
-    [project, selectedColumnId],
-  );
   if (pending)
     return (
       <div className="product-frame">
@@ -899,43 +863,7 @@ export function BoardScreen({ projectId }: { projectId: string }) {
             <BoardLifecycle project={project} onChanged={applyProjectSnapshot} />
           </div>
         </header>
-        <div className="mobile-column-picker">
-          <label className="field" htmlFor="mobile-column">
-            Show column
-            <select
-              id="mobile-column"
-              value={selectedColumnId ?? ""}
-              onChange={(event) => setSelectedColumnId(event.target.value)}
-            >
-              {project.columns.map((column) => (
-                <option value={column.id} key={column.id}>
-                  {column.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <section className="board-surface" aria-label="Workflow board">
-          <div
-            className="board-columns board-columns--desktop"
-            style={{ "--board-column-count": project.columns.length } as CSSProperties}
-          >
-            {project.columns.map((column) => (
-              <BoardColumn
-                key={column.id}
-                column={column}
-                headingId={`desktop-column-${column.id}`}
-              />
-            ))}
-          </div>
-          <div className="board-column board-column--mobile">
-            {selected ? (
-              <BoardColumn column={selected} headingId={`mobile-column-${selected.id}`} />
-            ) : (
-              <p>No workflow columns are available.</p>
-            )}
-          </div>
-        </section>
+        <TaskBoard project={project} />
         <BoardExtras project={project} onSaved={applyProjectSnapshot} />
         <section className="board-history" aria-labelledby="history-title">
           <div>

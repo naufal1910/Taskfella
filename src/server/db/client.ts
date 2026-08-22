@@ -17,7 +17,7 @@ const globalForDatabase = globalThis as typeof globalThis & {
 // Drizzle records the SHA-256 of each applied migration in its ledger. Readiness
 // is tied to the latest required migration, not to a row count or table probe.
 export const REQUIRED_MIGRATION_HASH =
-  "5776b8e47a198937b36f5d5084d3b8bf85135028b604ba643dcf001213d8fda3";
+  "3f3fae8666b2b0e317f18704f3998159985316c642d6c23d28158d12030b70e8";
 
 export function createDatabase(
   connectionString = getEnvironment().DATABASE_URL,
