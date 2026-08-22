@@ -1,0 +1,4 @@
+CREATE UNIQUE INDEX "projects_id_account_unique" ON "projects" USING btree ("id","account_id");--> statement-breakpoint
+ALTER TABLE "project_lifecycle_events" DROP CONSTRAINT "project_lifecycle_events_account_id_accounts_id_fk";--> statement-breakpoint
+ALTER TABLE "project_lifecycle_events" ADD CONSTRAINT "project_lifecycle_events_project_owner_fk" FOREIGN KEY ("project_id","account_id") REFERENCES "public"."projects"("id","account_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "labels" ADD CONSTRAINT "labels_normalized_name_lowercase_check" CHECK ("labels"."normalized_name" = lower("labels"."normalized_name"));

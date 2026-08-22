@@ -23,6 +23,14 @@ export type AppErrorCode =
   | "IDENTITY_ALREADY_LINKED"
   | "ACCOUNT_LINK_REQUIRED"
   | "OAUTH_SESSION_INVALID"
+  | "BOARD_INVARIANT_VIOLATION"
+  | "WORKFLOW_CONFIRMATION_REQUIRED"
+  | "WIP_LIMIT_REACHED"
+  | "WIP_CONFIRMATION_REQUIRED"
+  | "COLUMN_NOT_EMPTY"
+  | "PROJECT_NOT_ARCHIVED"
+  | "PERMANENT_DELETE_CONFIRMATION_REQUIRED"
+  | "CONCURRENT_UPDATE"
   | "INTERNAL_ERROR";
 
 const statusByCode: Record<AppErrorCode, number> = {
@@ -48,6 +56,14 @@ const statusByCode: Record<AppErrorCode, number> = {
   IDENTITY_ALREADY_LINKED: 409,
   ACCOUNT_LINK_REQUIRED: 409,
   OAUTH_SESSION_INVALID: 401,
+  BOARD_INVARIANT_VIOLATION: 409,
+  WORKFLOW_CONFIRMATION_REQUIRED: 409,
+  WIP_LIMIT_REACHED: 409,
+  WIP_CONFIRMATION_REQUIRED: 409,
+  COLUMN_NOT_EMPTY: 409,
+  PROJECT_NOT_ARCHIVED: 409,
+  PERMANENT_DELETE_CONFIRMATION_REQUIRED: 409,
+  CONCURRENT_UPDATE: 409,
   INTERNAL_ERROR: 500,
 };
 
@@ -74,6 +90,16 @@ const messageByCode: Record<AppErrorCode, string> = {
   IDENTITY_ALREADY_LINKED: "That Google identity is already linked to this account.",
   ACCOUNT_LINK_REQUIRED: "Sign in with your existing method, then link Google from your account.",
   OAUTH_SESSION_INVALID: "Your account session expired. Sign in and try again.",
+  BOARD_INVARIANT_VIOLATION: "Keep exactly one active column and at least one completed column.",
+  WORKFLOW_CONFIRMATION_REQUIRED:
+    "This change can change what completed means for existing work. Confirm it before saving.",
+  WIP_LIMIT_REACHED: "That column has reached its enforced WIP limit.",
+  WIP_CONFIRMATION_REQUIRED: "That move would exceed the column WIP limit. Confirm to continue.",
+  COLUMN_NOT_EMPTY: "Only empty columns can be deleted.",
+  PROJECT_NOT_ARCHIVED: "The project is not archived.",
+  PERMANENT_DELETE_CONFIRMATION_REQUIRED:
+    "Permanent deletion requires typing the project name exactly.",
+  CONCURRENT_UPDATE: "This workflow changed elsewhere. Reload and try again.",
   INTERNAL_ERROR: "An unexpected error occurred.",
 };
 

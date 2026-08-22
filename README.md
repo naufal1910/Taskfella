@@ -2,7 +2,7 @@
 
 Taskfella is an open-source, personal-first, board-first workspace for focused execution. It will bring Kanban planning, Pomodoro focus, manual time tracking, and personal analytics into one calm daily workflow.
 
-This repository currently contains **Phase 0 plus Phase 1A–1E: the application, authentication foundation, email/password lifecycle, Google OAuth with explicit identity linking, account settings/appearance behavior, and integrated authentication verification**. Boards, tasks, timers, analytics, and exports remain later-phase behavior.
+This repository currently contains **Phase 0, Phase 1A–1E, and Phase 2: the application, authentication foundation, email/password lifecycle, Google OAuth with explicit identity linking, account settings/appearance behavior, integrated authentication verification, and account-owned project/workflow boards**. Tasks, timers, analytics, and exports remain later-phase behavior.
 
 ## Quick start
 
@@ -18,7 +18,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-Open <http://localhost:3000>. Check database and application readiness with:
+Open <http://localhost:3000>. After signing in, open the Phase 2 project workspace at <http://localhost:3000/projects>. Check database and application readiness with:
 
 ```bash
 curl -i http://localhost:3000/api/health
@@ -45,7 +45,7 @@ A migrated, reachable database returns HTTP `200` with `status: "ok"`. An unavai
 | `pnpm start`                     | Serve the production build                                       |
 | `pnpm db:stop`                   | Stop local PostgreSQL                                            |
 
-The local code-quality pass is `pnpm validate`; the full authentication verification sequence, including migration, readiness, integration, and build checks, is in the [Phase 1E verification record](docs/implementation/taskfella-phase1e-verification.md). Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. See the [foundation operations guide](docs/operations.md) for authentication delivery, local message artifacts, trusted-proxy rate limits, and production SMTP configuration.
+The local code-quality pass is `pnpm validate`; the full Phase 1 and Phase 2 verification sequence, including migration, readiness, integration, responsive board checks, and build checks, is in the [Phase 2 verification record](docs/implementation/taskfella-phase2-projects-boards.md). Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. See the [foundation operations guide](docs/operations.md) for authentication delivery, local message artifacts, trusted-proxy rate limits, and production SMTP configuration.
 
 ## Production container
 
@@ -80,7 +80,7 @@ The contributor-facing validator command and zero-error/zero-warning requirement
 
 - [Approved product specification](docs/specification/taskfella-mvp-design.md)
 - [Approved implementation analysis and phased plan](docs/implementation/taskfella-analysis.md)
-- [Phase 0 through Phase 1E documentation index](docs/README.md)
+- [Phase 0 through Phase 2 documentation index](docs/README.md)
 - [Phase 1A authentication foundation](docs/implementation/taskfella-phase1a-auth.md)
 - [Phase 1B email/password authentication](docs/implementation/taskfella-phase1b-auth.md)
 - [Phase 1C Google OAuth and explicit identity linking](docs/implementation/taskfella-phase1c-google-oauth.md)
@@ -93,7 +93,9 @@ The contributor-facing validator command and zero-error/zero-warning requirement
 - [Phase 1D account settings issue](https://github.com/naufal1910/Taskfella/issues/16)
 - [Phase 1D account settings implementation notes](docs/implementation/taskfella-phase1d-settings.md)
 - [Phase 1E integrated verification issue](https://github.com/naufal1910/Taskfella/issues/17)
+- [Phase 2 projects and workflow issue](https://github.com/naufal1910/Taskfella/issues/4)
 - [Phase 1E verification record](docs/implementation/taskfella-phase1e-verification.md)
+- [Phase 2 projects and workflow boards](docs/implementation/taskfella-phase2-projects-boards.md)
 
 ## License
 
