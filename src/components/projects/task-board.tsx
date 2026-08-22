@@ -29,6 +29,7 @@ type BoardProject = ProjectData & {
 
 type TaskResponse = { task: TaskData };
 type TaskListResponse = { tasks: TaskData[] };
+const DEFAULT_TASK_COLOR = "#0F766E";
 
 function taskUrl(projectId: string, taskId: string, suffix = "") {
   return `/api/projects/${projectId}/tasks/${taskId}${suffix}`;
@@ -250,7 +251,7 @@ function MarkdownPreview({ value }: { value: string }) {
   );
 }
 
-function TaskDetails({
+export function TaskDetails({
   project,
   task,
   onClose,
@@ -270,7 +271,7 @@ function TaskDetails({
   const [columnId, setColumnId] = useState(task.columnId);
   const [swimlaneId, setSwimlaneId] = useState(task.swimlaneId ?? "");
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
-  const [color, setColor] = useState(task.color ?? "#0F766E");
+  const [color, setColor] = useState<string | null>(task.color);
   const [labelIds, setLabelIds] = useState(task.labels.map((label) => label.id));
   const [subtaskText, setSubtaskText] = useState("");
   const [noteBody, setNoteBody] = useState("");
@@ -319,7 +320,7 @@ function TaskDetails({
       columnId,
       swimlaneId: swimlaneId || null,
       dueDate: dueDate || null,
-      color: color || null,
+      color,
       labelIds,
       expectedRevision: task.revision,
     };
@@ -646,15 +647,27 @@ function TaskDetails({
                     onChange={(event) => setDueDate(event.target.value)}
                   />
                 </label>
-                <label className="field" htmlFor="task-color">
-                  Card color
+                <div className="field">
+                  <label htmlFor="task-color">Card color</label>
                   <input
                     id="task-color"
                     type="color"
-                    value={color}
+                    value={color ?? DEFAULT_TASK_COLOR}
+                    aria-describedby="task-color-help"
                     onChange={(event) => setColor(event.target.value)}
                   />
-                </label>
+                  <button
+                    className="text-button"
+                    type="button"
+                    aria-label="Clear card color"
+                    onClick={() => setColor(null)}
+                  >
+                    Clear card color
+                  </button>
+                  <span id="task-color-help" className="field-help">
+                    {color ? `Using ${color}` : "No color set"}
+                  </span>
+                </div>
               </div>
               <fieldset className="task-label-picker">
                 <legend>Labels</legend>

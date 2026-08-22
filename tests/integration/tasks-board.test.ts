@@ -25,6 +25,7 @@ import {
   trashTask,
   updateNote,
   updateSubtask,
+  updateTask,
 } from "@/server/modules/tasks/service";
 import { GET as getTaskRoute } from "@/app/api/projects/[projectId]/tasks/[taskId]/route";
 import { GET as listTaskRoute } from "@/app/api/projects/[projectId]/tasks/route";
@@ -87,6 +88,27 @@ integration("Phase 3 tasks and board execution transactions", () => {
     });
     expect(task.task.description).not.toMatch(/javascript:|<[^>]+>/i);
     expect(task.labels.map((item) => item.name)).toEqual(["Focus"]);
+
+    const uncolored = await createTask(db, account.id, board.project.id, {
+      title: "Uncolored task",
+      columnId: queue.id,
+    });
+    expect(uncolored.task.color).toBeNull();
+    const renamedUncolored = await updateTask(db, account.id, uncolored.task.id, {
+      title: "Renamed uncolored task",
+      expectedRevision: uncolored.task.revision,
+    });
+    expect(renamedUncolored.task.color).toBeNull();
+    const colored = await updateTask(db, account.id, uncolored.task.id, {
+      color: "#246BCE",
+      expectedRevision: renamedUncolored.task.revision,
+    });
+    expect(colored.task.color).toBe("#246BCE");
+    const cleared = await updateTask(db, account.id, uncolored.task.id, {
+      color: null,
+      expectedRevision: colored.task.revision,
+    });
+    expect(cleared.task.color).toBeNull();
 
     const subtask = await createSubtask(db, account.id, task.task.id, "Ship it");
     expect(subtask.subtasks[0]).toMatchObject({ text: "Ship it", position: 0 });
