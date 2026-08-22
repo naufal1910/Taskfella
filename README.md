@@ -45,7 +45,7 @@ A migrated, reachable database returns HTTP `200` with `status: "ok"`. An unavai
 | `pnpm start`                     | Serve the production build                                       |
 | `pnpm db:stop`                   | Stop local PostgreSQL                                            |
 
-The full local quality pass is `pnpm validate`. Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. See the [foundation operations guide](docs/operations.md) for authentication delivery, local message artifacts, trusted-proxy rate limits, and production SMTP configuration. The [Phase 1E verification record](docs/implementation/taskfella-phase1e-verification.md) lists the reproducible browser, security, leakage, and readiness checks.
+The local code-quality pass is `pnpm validate`; the full authentication verification sequence, including migration, readiness, integration, and build checks, is in the [Phase 1E verification record](docs/implementation/taskfella-phase1e-verification.md). Database-backed tests require the local database to be running and migrated. Compose exposes PostgreSQL on host port `5433` so it can coexist with other local projects; `.env.example` matches that port. See the [foundation operations guide](docs/operations.md) for authentication delivery, local message artifacts, trusted-proxy rate limits, and production SMTP configuration.
 
 ## Production container
 

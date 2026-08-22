@@ -34,7 +34,7 @@ The command is intentionally run on demand rather than kept as a project depende
 
 ## Before opening a pull request
 
-Run the same checks as CI:
+Run the repository checks locally:
 
 ```bash
 pnpm format:check

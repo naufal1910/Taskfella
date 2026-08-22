@@ -34,11 +34,11 @@ Phase 1B defaults non-production environments to `EMAIL_DELIVERY_MODE=local`. Ve
 
 Production startup rejects local delivery. Set `AUTH_TRUSTED_PROXY=true` behind the trusted edge, then set `EMAIL_DELIVERY_MODE=smtp`, `EMAIL_SMTP_HOST`, and `EMAIL_FROM`, and configure the documented port, TLS mode, and optional paired SMTP credentials. The app uses the portable SMTP transport and never falls back to local capture.
 
-Verification and password-reset links carry their one-time value in a URL fragment. The browser submits the value only through the existing CSRF-protected API mutation, keeping bearer values out of server request logs and referrers. Existing query-style links remain accepted by the client during the transition.
+Verification and password-reset link handling, including fragment-based bearer submission and legacy query compatibility, is defined in the [Phase 1B implementation note](implementation/taskfella-phase1b-auth.md).
 
 ## Google OAuth
 
-Google credentials are optional in local development. If they are omitted, the browser Google sign-in action redirects to a clear `oauth=not-configured` state, and the authenticated Link Google account action returns a safe `OAUTH_NOT_CONFIGURED` response that directs the account holder to continue with email/password or ask an administrator to enable Google. Email/password authentication remains available. If either value is supplied, both must be supplied and valid; production startup refuses missing, partial, or malformed configuration.
+Google credentials are optional in local development; when omitted, sign-in and linking use the safe not-configured outcomes described in the [Phase 1C implementation note](implementation/taskfella-phase1c-google-oauth.md). Email/password authentication remains available. If either value is supplied, both must be supplied and valid; production startup refuses missing, partial, or malformed configuration.
 
 Use a Google OAuth **Web application** client and register this exact callback URL:
 

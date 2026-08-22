@@ -46,11 +46,8 @@ describe("authentication and settings page headers", () => {
   });
 
   it("canonicalizes legacy one-time query links to the configured application origin", async () => {
-    const response = withProxyEnvironment(
-      "https://taskfella.example",
-      undefined,
-      () =>
-        proxy(new NextRequest("http://untrusted.example/verify-email?token=one-time-token")),
+    const response = withProxyEnvironment("https://taskfella.example", undefined, () =>
+      proxy(new NextRequest("http://untrusted.example/verify-email?token=one-time-token")),
     );
 
     expect(response.status).toBe(303);
