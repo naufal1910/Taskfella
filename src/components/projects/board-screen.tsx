@@ -895,11 +895,7 @@ export function BoardScreen({ projectId }: { projectId: string }) {
           </div>
           <div className="board-header__actions">
             <ProjectDetailsEditor project={project} onSaved={applyProjectSnapshot} />
-            <WorkflowEditor
-              key={project.id}
-              project={project}
-              onSaved={applyProjectSnapshot}
-            />
+            <WorkflowEditor key={project.id} project={project} onSaved={applyProjectSnapshot} />
             <BoardLifecycle project={project} onChanged={applyProjectSnapshot} />
           </div>
         </header>

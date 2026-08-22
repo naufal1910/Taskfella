@@ -416,12 +416,10 @@ integration("Phase 2 projects and workflow transactions", () => {
     );
     expect(emptyLabelDelete.status).toBe(200);
 
-    const bodylessColumn = await addColumn(
-      db,
-      account.id,
-      created.project.id,
-      { name: "Bodyless delete", role: "neutral" },
-    );
+    const bodylessColumn = await addColumn(db, account.id, created.project.id, {
+      name: "Bodyless delete",
+      role: "neutral",
+    });
     const bodylessColumnId = bodylessColumn.columns.find(
       (column) => column.name === "Bodyless delete",
     )!.id;
