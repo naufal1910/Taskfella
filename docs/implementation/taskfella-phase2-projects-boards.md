@@ -4,7 +4,7 @@ Phase 2 delivers the account-owned board foundation from [issue #4](https://gith
 
 ## Product boundary
 
-A project is the board in this phase. It has an owner account, name, constrained description, active/archived lifecycle, stable order, a revision for optimistic concurrency, and retained lifecycle events. Archive and restore never remove workflow data. Permanent deletion is a separate destructive action and requires the exact project name in the request; the UI requires the same typed confirmation before enabling the final button.
+A project is the board in this phase. It has an owner account, name, constrained description, active/archived lifecycle, stable order, a revision for optimistic concurrency, and retained lifecycle events. Archive and restore never remove workflow data. Archived boards remain readable but reject project-setting and task mutations until restored; lifecycle restore and typed permanent deletion remain available. Permanent deletion is a separate destructive action and requires the exact project name in the request; the UI requires the same typed confirmation before enabling the final button.
 
 Project creation supports:
 
@@ -12,7 +12,7 @@ Project creation supports:
 - **Simple:** `To Do` (queued), `In Progress` (active), `Done` (completed);
 - **Blank:** a minimal valid `In Progress` (active) and `Done` (completed) foundation, ready for manual customization.
 
-Every template is valid at commit time. The Phase 2 board intentionally contains no task execution surface. The empty-column and WIP transaction hooks are the workflow boundary that Phase 3 task movement will use rather than a speculative task model.
+Every template is valid at commit time. The Phase 2 board intentionally contained no task execution surface. Its empty-column and WIP transaction hooks are the workflow boundary now consumed by the Phase 3 task service; see the [Phase 3 implementation record](taskfella-phase3-tasks.md).
 
 ## Persistence and invariants
 
@@ -26,11 +26,11 @@ The ordered `0007_known_earthquake` and `0008_absent_warbird` migrations add:
 - a deferred PostgreSQL constraint trigger that checks exactly one active column and at least one completed column at transaction commit, including project insertion and concurrent raw writes;
 - a composite project-owner foreign key for lifecycle events and a lowercase normalized-label check.
 
-The application serializes project workflow changes with a PostgreSQL advisory transaction lock plus a row lock. Revision preconditions turn stale client edits into `CONCURRENT_UPDATE` conflicts, including swimlane and label mutations. Role changes crossing the completed boundary require `confirmCompletionChanges`; invalid final role sets are rejected before any update is committed. Column deletion is permitted only for an empty Phase 2 workflow column and is still checked against the role invariants. The project-scoped column `DELETE` route accepts an empty body; when JSON is supplied, it may carry revision options, while malformed JSON remains invalid.
+The application serializes project workflow changes with a PostgreSQL advisory transaction lock plus a row lock. Revision preconditions turn stale client edits into `CONCURRENT_UPDATE` conflicts, including swimlane and label mutations. Role changes crossing the completed boundary require `confirmCompletionChanges`; invalid final role sets are rejected before any update is committed. At the Phase 2 boundary, column deletion was permitted only for an empty workflow column and was still checked against the role invariants; current task-aware deletion and restoration behavior is documented in the [Phase 3 implementation record](taskfella-phase3-tasks.md). The project-scoped column `DELETE` route accepts an empty body; when JSON is supplied, it may carry revision options, while malformed JSON remains invalid.
 
 The workflow editor keeps its mounted local draft while add/delete responses update the saved project snapshot, preserving unsaved edits and surfacing concurrent revision conflicts instead of discarding them.
 
-`src/server/modules/workflow/wip.ts` owns the WIP policy. `none` always allows, `warn` requires an explicit confirmation retry when the authoritative count is at the limit, and `enforce` rejects overflow. `assertColumnWip` runs both the authoritative count reader and the future task mutation inside the project-locked transaction, so a stale browser count or concurrent move cannot bypass WIP. No client-only WIP warning is treated as authoritative.
+`src/server/modules/workflow/wip.ts` owns the WIP policy. `none` always allows, `warn` requires an explicit confirmation retry when the authoritative count is at the limit, and `enforce` rejects overflow. The Phase 3 task service consumes this policy inside the project-locked transaction; see the [Phase 3 implementation record](taskfella-phase3-tasks.md). No client-only WIP warning is treated as authoritative.
 
 ## API surface
 
@@ -49,7 +49,7 @@ Responses use safe error codes such as `BOARD_INVARIANT_VIOLATION`, `WORKFLOW_CO
 
 `/projects` provides accessible active and archived project sections, template creation, project ordering/lifecycle controls, and typed permanent-delete confirmation. `/projects/:projectId` provides the board-first surface, semantic role and WIP configuration, column reorder/add/delete controls, optional swimlane and board-label creation, retained lifecycle history, and archive/restore actions.
 
-Desktop/tablet uses the canonical warm-paper/sidebar/multi-column layout. Small screens hide the sidebar, expose bottom navigation, select one workflow column at a time, and retain all configuration controls with 44px touch targets. Empty board content explicitly identifies the later Phase 3 task boundary; no drag gesture is required for any Phase 2 state change.
+Desktop/tablet uses the canonical warm-paper/sidebar/multi-column layout. Small screens hide the sidebar, expose bottom navigation, select one workflow column at a time, and retain all configuration controls with 44px touch targets. At the Phase 2 boundary, empty board content identified the task boundary; the current task board is documented in the [Phase 3 implementation record](taskfella-phase3-tasks.md). No drag gesture was required for any Phase 2 state change.
 
 ## Verification
 
@@ -68,4 +68,4 @@ pnpm build
 
 Executable coverage includes template validity, account isolation, project and workflow mutation routes, workflow ordering and configuration, role confirmation, WIP modes, malformed and bodyless column-delete parsing, deferred database invariant rejection, concurrent revision serialization, archive/restore retention, explicit destructive deletion, and migration/readiness behavior. External browser/accessibility evidence covers desktop and 390px mobile dimensions using local fixtures only: on 2026-08-22, `chrome-devtools-axi` verified the authenticated project list and board, including desktop multi-column navigation, mobile one-column selection, bottom navigation, typed destructive confirmation, workflow dialog semantics, and visible focus/labels. Lighthouse reported Accessibility 100, Best Practices 100, and SEO 100 for the local project list.
 
-The PR for this record carries `Closes #4`. Parent roadmap issue #1 remains open for later task, focus, analytics, export, and collaboration phases.
+The PR for this record carries `Closes #4`. Phase 3 task work is recorded separately; parent roadmap issue #1 remains open for later focus, analytics, export, and collaboration phases.

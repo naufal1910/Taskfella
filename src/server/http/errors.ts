@@ -29,7 +29,11 @@ export type AppErrorCode =
   | "WIP_CONFIRMATION_REQUIRED"
   | "COLUMN_NOT_EMPTY"
   | "PROJECT_NOT_ARCHIVED"
+  | "PROJECT_ARCHIVED"
   | "PERMANENT_DELETE_CONFIRMATION_REQUIRED"
+  | "PERMANENT_TASK_DELETE_CONFIRMATION_REQUIRED"
+  | "TASK_TRASHED"
+  | "TASK_NOT_TRASHED"
   | "CONCURRENT_UPDATE"
   | "INTERNAL_ERROR";
 
@@ -62,7 +66,11 @@ const statusByCode: Record<AppErrorCode, number> = {
   WIP_CONFIRMATION_REQUIRED: 409,
   COLUMN_NOT_EMPTY: 409,
   PROJECT_NOT_ARCHIVED: 409,
+  PROJECT_ARCHIVED: 409,
   PERMANENT_DELETE_CONFIRMATION_REQUIRED: 409,
+  PERMANENT_TASK_DELETE_CONFIRMATION_REQUIRED: 409,
+  TASK_TRASHED: 409,
+  TASK_NOT_TRASHED: 409,
   CONCURRENT_UPDATE: 409,
   INTERNAL_ERROR: 500,
 };
@@ -97,8 +105,13 @@ const messageByCode: Record<AppErrorCode, string> = {
   WIP_CONFIRMATION_REQUIRED: "That move would exceed the column WIP limit. Confirm to continue.",
   COLUMN_NOT_EMPTY: "Only empty columns can be deleted.",
   PROJECT_NOT_ARCHIVED: "The project is not archived.",
+  PROJECT_ARCHIVED: "Archived projects are read-only until they are restored.",
   PERMANENT_DELETE_CONFIRMATION_REQUIRED:
     "Permanent deletion requires typing the project name exactly.",
+  PERMANENT_TASK_DELETE_CONFIRMATION_REQUIRED:
+    "Permanent deletion requires typing the task title exactly.",
+  TASK_TRASHED: "Trash items must be restored before they can be edited.",
+  TASK_NOT_TRASHED: "Only tasks in Trash can be restored or permanently deleted.",
   CONCURRENT_UPDATE: "This workflow changed elsewhere. Reload and try again.",
   INTERNAL_ERROR: "An unexpected error occurred.",
 };

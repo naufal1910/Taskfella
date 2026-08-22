@@ -2,7 +2,9 @@
 
 **Date:** 2026-08-09
 
-**Status:** Analysis complete; implementation has not started.
+**Status:** Historical analysis complete; the foundation through Phase 2 is merged and the Phase 3 task/board-execution implementation is under review.
+
+This document began as a pre-foundation analysis. Its repository-comparison sections describe that historical baseline; current implementation truth is `src/server/db/schema.ts`, ordered `drizzle/` migrations, the Phase 2 and Phase 3 implementation records, and the executable commands in `README.md`.
 
 ## 1. Executive conclusion
 
@@ -10,9 +12,9 @@ Taskfella is a personal-first project execution application combining a customiz
 
 The PRD defines a complete and coherent MVP centered on a trustworthy daily execution loop.
 
-The current repository is firstmate, an agent-orchestration distro, not a Taskfella application.
+The historical repository snapshot was firstmate, an agent-orchestration distro, not a Taskfella application. The current checkout is the Taskfella application described by the later phase records.
 
-The current repository has no frontend, backend, database schema, migrations, application package configuration, or browser test suite for Taskfella.
+The historical repository snapshot had no frontend, backend, database schema, migrations, application package configuration, or browser test suite for Taskfella.
 
 Taskfella should be created as a separate application repository.
 
@@ -1119,6 +1121,8 @@ A user can create each project template, open a valid board, customize its workf
 Phase 1.
 
 ### Phase 3: Tasks and board execution
+
+**Current implementation record:** [taskfella-phase3-tasks.md](taskfella-phase3-tasks.md). The branch implementation remains pending the captain-approved PR merge and issue #5 remains open until then.
 
 #### Objective
 

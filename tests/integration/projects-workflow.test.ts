@@ -1,14 +1,24 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { getDatabase, closeDatabase } from "@/server/db/client";
-import { projects, columns, projectLifecycleEvents, accounts } from "@/server/db/schema";
+import {
+  accounts,
+  columns,
+  notes,
+  projectLifecycleEvents,
+  projects,
+  subtasks,
+  taskLabels,
+  taskLifecycleEvents,
+  tasks,
+} from "@/server/db/schema";
 import { createAccount } from "@/server/modules/auth/accounts";
 import { createSession } from "@/server/modules/auth/sessions";
 import {
   addColumn,
   archiveProject,
-  configureColumns,
   createLabel,
+  configureColumns,
   createProject,
   createSwimlane,
   deleteColumn,
@@ -20,6 +30,7 @@ import {
   updateLabel,
   updateSwimlane,
 } from "@/server/modules/projects/service";
+import { createNote, createSubtask, createTask, trashTask } from "@/server/modules/tasks/service";
 import { assertColumnWip } from "@/server/modules/workflow/wip";
 import { DELETE as deleteProjectColumnRoute } from "@/app/api/projects/[projectId]/columns/[columnId]/route";
 import { DELETE as deleteProjectLabelRoute } from "@/app/api/projects/[projectId]/labels/[labelId]/route";
@@ -566,6 +577,16 @@ integration("Phase 2 projects and workflow transactions", () => {
     const archived = await archiveProject(db, account.id, snapshot.project.id);
     expect(archived.project.status).toBe("archived");
     expect(archived.columns).toHaveLength(3);
+    await expect(
+      updateColumn(
+        db,
+        account.id,
+        snapshot.project.id,
+        archived.columns[0]!.id,
+        { name: "Blocked" },
+        { expectedRevision: archived.project.revision },
+      ),
+    ).rejects.toMatchObject({ code: "PROJECT_ARCHIVED" });
     const restored = await restoreProject(db, account.id, snapshot.project.id);
     expect(restored.project.status).toBe("active");
     expect(restored.columns).toHaveLength(3);
@@ -590,6 +611,79 @@ integration("Phase 2 projects and workflow transactions", () => {
         .select()
         .from(projectLifecycleEvents)
         .where(eq(projectLifecycleEvents.projectId, snapshot.project.id)),
+    ).toHaveLength(0);
+  });
+
+  it("deletes project tasks and dependents transactionally after exact confirmation", async () => {
+    if (!db) return;
+    const account = await owner("project-delete-tasks");
+    const snapshot = await createProject(db, account.id, {
+      name: "Task-bearing board",
+      template: "simple",
+    });
+    const queue = snapshot.columns.find((column) => column.role === "queued")!;
+    const labelSnapshot = await createLabel(db, account.id, snapshot.project.id, {
+      name: "Retain me",
+    });
+    const task = await createTask(db, account.id, snapshot.project.id, {
+      title: "Task with dependents",
+      columnId: queue.id,
+      labelIds: [labelSnapshot.labels[0]!.id],
+    });
+    await createSubtask(db, account.id, task.task.id, "Dependent checklist");
+    await createNote(db, account.id, task.task.id, "Dependent note");
+    const trashed = await createTask(db, account.id, snapshot.project.id, {
+      title: "Trashed task",
+      columnId: queue.id,
+    });
+    await trashTask(db, account.id, trashed.task.id);
+
+    await expect(
+      permanentlyDeleteProject(db, account.id, snapshot.project.id, "wrong"),
+    ).rejects.toMatchObject({ code: "PERMANENT_DELETE_CONFIRMATION_REQUIRED" });
+    expect(
+      await db.select().from(projects).where(eq(projects.id, snapshot.project.id)),
+    ).toHaveLength(1);
+    expect(
+      await db.select().from(tasks).where(eq(tasks.projectId, snapshot.project.id)),
+    ).toHaveLength(2);
+    expect(
+      await db.select().from(subtasks).where(eq(subtasks.projectId, snapshot.project.id)),
+    ).toHaveLength(1);
+    expect(
+      await db.select().from(notes).where(eq(notes.projectId, snapshot.project.id)),
+    ).toHaveLength(1);
+    expect(
+      await db.select().from(taskLabels).where(eq(taskLabels.projectId, snapshot.project.id)),
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(taskLifecycleEvents)
+        .where(eq(taskLifecycleEvents.projectId, snapshot.project.id)),
+    ).toHaveLength(3);
+
+    await permanentlyDeleteProject(db, account.id, snapshot.project.id, "Task-bearing board");
+    expect(
+      await db.select().from(projects).where(eq(projects.id, snapshot.project.id)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(tasks).where(eq(tasks.projectId, snapshot.project.id)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(subtasks).where(eq(subtasks.projectId, snapshot.project.id)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(notes).where(eq(notes.projectId, snapshot.project.id)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(taskLabels).where(eq(taskLabels.projectId, snapshot.project.id)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(taskLifecycleEvents)
+        .where(eq(taskLifecycleEvents.projectId, snapshot.project.id)),
     ).toHaveLength(0);
   });
 });

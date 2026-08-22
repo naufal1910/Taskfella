@@ -25,6 +25,71 @@ export interface LabelData {
   position: number;
 }
 
+export interface TaskLabelData extends LabelData {}
+
+export interface SubtaskData {
+  id: string;
+  taskId: string;
+  projectId: string;
+  accountId: string;
+  text: string;
+  completed: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoteData {
+  id: string;
+  taskId: string;
+  projectId: string;
+  accountId: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskLifecycleData {
+  id: string;
+  taskId: string;
+  projectId: string;
+  accountId: string;
+  event: string;
+  fromColumnId: string | null;
+  toColumnId: string | null;
+  fromSwimlaneId: string | null;
+  toSwimlaneId: string | null;
+  createdAt: string;
+}
+
+export interface TaskData {
+  id: string;
+  accountId: string;
+  projectId: string;
+  columnId: string;
+  swimlaneId: string | null;
+  title: string;
+  description: string;
+  color: string | null;
+  dueDate: string | null;
+  position: number;
+  revision: number;
+  completedAt: string | null;
+  deletedAt: string | null;
+  restoreColumnId: string | null;
+  restoreSwimlaneId: string | null;
+  restorePosition: number | null;
+  createdAt: string;
+  updatedAt: string;
+  labels: LabelData[];
+  subtasks?: SubtaskData[];
+  notes?: NoteData[];
+  lifecycle?: TaskLifecycleData[];
+  subtaskCount?: number;
+  completedSubtaskCount?: number;
+  noteCount?: number;
+}
+
 export interface ProjectData {
   id: string;
   accountId: string;
