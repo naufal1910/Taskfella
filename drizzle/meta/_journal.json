@@ -50,6 +50,20 @@
       "when": 1787330885337,
       "tag": "0006_perpetual_umar",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787371253298,
+      "tag": "0007_known_earthquake",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787374144183,
+      "tag": "0008_absent_warbird",
+      "breakpoints": true
     }
   ]
 }

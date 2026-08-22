@@ -10,6 +10,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 
 const utcTimestamp = (name: string) =>
@@ -280,6 +281,156 @@ export const authRateLimits = pgTable(
   ],
 );
 
+export const projects = pgTable(
+  "projects",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    status: text("status").notNull().default("active"),
+    position: integer("position").notNull().default(0),
+    revision: integer("revision").notNull().default(0),
+    archivedAt: utcTimestamp("archived_at"),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+    updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("projects_account_status_position_idx").on(table.accountId, table.status, table.position),
+    index("projects_account_updated_idx").on(table.accountId, table.updatedAt),
+    uniqueIndex("projects_id_account_unique").on(table.id, table.accountId),
+    check("projects_name_length_check", sql`length(trim(${table.name})) BETWEEN 1 AND 120`),
+    check("projects_description_length_check", sql`length(${table.description}) <= 20000`),
+    check("projects_status_value_check", sql`${table.status} IN ('active', 'archived')`),
+    check("projects_position_nonnegative_check", sql`${table.position} >= 0`),
+    check("projects_revision_nonnegative_check", sql`${table.revision} >= 0`),
+    check(
+      "projects_archive_state_check",
+      sql`(${table.status} = 'active' AND ${table.archivedAt} IS NULL) OR (${table.status} = 'archived' AND ${table.archivedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const columns = pgTable(
+  "columns",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    role: text("role").notNull().default("neutral"),
+    position: integer("position").notNull().default(0),
+    wipMode: text("wip_mode").notNull().default("none"),
+    wipLimit: integer("wip_limit"),
+    completedGrouping: text("completed_grouping").notNull().default("list"),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+    updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("columns_project_position_idx").on(table.projectId, table.position),
+    index("columns_project_role_idx").on(table.projectId, table.role),
+    uniqueIndex("columns_one_active_per_project_unique")
+      .on(table.projectId)
+      .where(sql`${table.role} = 'active'`),
+    check("columns_name_length_check", sql`length(trim(${table.name})) BETWEEN 1 AND 80`),
+    check(
+      "columns_role_value_check",
+      sql`${table.role} IN ('queued', 'planned', 'active', 'review', 'completed', 'neutral')`,
+    ),
+    check("columns_position_nonnegative_check", sql`${table.position} >= 0`),
+    check("columns_wip_mode_value_check", sql`${table.wipMode} IN ('none', 'warn', 'enforce')`),
+    check(
+      "columns_wip_limit_consistency_check",
+      sql`(${table.wipMode} = 'none' AND ${table.wipLimit} IS NULL) OR (${table.wipMode} IN ('warn', 'enforce') AND ${table.wipLimit} IS NOT NULL AND ${table.wipLimit} BETWEEN 1 AND 1000000)`,
+    ),
+    check(
+      "columns_completed_grouping_value_check",
+      sql`${table.completedGrouping} IN ('list', 'date')`,
+    ),
+  ],
+);
+
+export const projectColumns = columns;
+
+export const swimlanes = pgTable(
+  "swimlanes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    position: integer("position").notNull().default(0),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+    updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("swimlanes_project_position_idx").on(table.projectId, table.position),
+    check("swimlanes_name_length_check", sql`length(trim(${table.name})) BETWEEN 1 AND 80`),
+    check("swimlanes_position_nonnegative_check", sql`${table.position} >= 0`),
+  ],
+);
+
+export const labels = pgTable(
+  "labels",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    color: text("color").notNull().default("#0F766E"),
+    position: integer("position").notNull().default(0),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+    updatedAt: utcTimestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("labels_project_normalized_name_unique").on(table.projectId, table.normalizedName),
+    index("labels_project_position_idx").on(table.projectId, table.position),
+    check("labels_name_length_check", sql`length(trim(${table.name})) BETWEEN 1 AND 60`),
+    check(
+      "labels_normalized_name_length_check",
+      sql`length(${table.normalizedName}) BETWEEN 1 AND 60`,
+    ),
+    check(
+      "labels_normalized_name_lowercase_check",
+      sql`${table.normalizedName} = lower(${table.normalizedName})`,
+    ),
+    check("labels_color_hex_check", sql`${table.color} ~ '^#[0-9A-Fa-f]{6}$'`),
+    check("labels_position_nonnegative_check", sql`${table.position} >= 0`),
+  ],
+);
+
+export const projectLifecycleEvents = pgTable(
+  "project_lifecycle_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id").notNull(),
+    event: text("event").notNull(),
+    createdAt: utcTimestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("project_lifecycle_events_project_created_idx").on(table.projectId, table.createdAt),
+    index("project_lifecycle_events_account_created_idx").on(table.accountId, table.createdAt),
+    foreignKey({
+      columns: [table.projectId, table.accountId],
+      foreignColumns: [projects.id, projects.accountId],
+      name: "project_lifecycle_events_project_owner_fk",
+    }).onDelete("cascade"),
+    check(
+      "project_lifecycle_events_event_value_check",
+      sql`${table.event} IN ('created', 'archived', 'restored')`,
+    ),
+  ],
+);
+
 export const foundationSchema = {
   accounts,
   passwordCredentials,
@@ -289,6 +440,11 @@ export const foundationSchema = {
   emailVerificationTokens,
   passwordResetTokens,
   authRateLimits,
+  projects,
+  columns,
+  swimlanes,
+  labels,
+  projectLifecycleEvents,
 } as const;
 
 export type Account = typeof accounts.$inferSelect;
@@ -300,3 +456,9 @@ export type OAuthTransaction = typeof oauthTransactions.$inferSelect;
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type AuthRateLimit = typeof authRateLimits.$inferSelect;
+export type Project = typeof projects.$inferSelect;
+export type NewProject = typeof projects.$inferInsert;
+export type ProjectColumn = typeof columns.$inferSelect;
+export type Swimlane = typeof swimlanes.$inferSelect;
+export type Label = typeof labels.$inferSelect;
+export type ProjectLifecycleEvent = typeof projectLifecycleEvents.$inferSelect;

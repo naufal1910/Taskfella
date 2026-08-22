@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@/server/http/errors";
-import { clientSubject, LOCAL_PROXY_MARKER } from "@/server/http/auth-route";
+import {
+  clientSubject,
+  LOCAL_PROXY_MARKER,
+  parseJsonObject,
+  parseOptionalJsonObject,
+} from "@/server/http/auth-route";
 
 const developmentEnvironment = {
   NODE_ENV: "development" as const,
@@ -29,5 +34,27 @@ describe("local proxy rate-limit boundary", () => {
     });
 
     expect(() => clientSubject(request, developmentEnvironment)).toThrow(AppError);
+  });
+});
+
+describe("JSON request parsing", () => {
+  it("accepts an absent body only for optional object parsing", async () => {
+    await expect(parseOptionalJsonObject(new Request("http://localhost:3000"))).resolves.toEqual(
+      {},
+    );
+    await expect(parseJsonObject(new Request("http://localhost:3000"))).rejects.toMatchObject({
+      code: "INVALID_REQUEST",
+    });
+  });
+
+  it("rejects malformed JSON instead of treating it as an empty object", async () => {
+    const request = new Request("http://localhost:3000", {
+      body: "{malformed",
+      method: "DELETE",
+    });
+
+    await expect(parseOptionalJsonObject(request)).rejects.toMatchObject({
+      code: "INVALID_REQUEST",
+    });
   });
 });
