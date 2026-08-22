@@ -182,13 +182,21 @@ function WorkflowEditor({
     try {
       const response = await apiRequest<ProjectResponse>(`/api/projects/${project.id}/columns`, {
         method: "POST",
-        body: JSON.stringify({ name: newName, role: "neutral" }),
+        body: JSON.stringify({
+          name: newName,
+          role: "neutral",
+          expectedRevision: project.revision,
+        }),
       });
       setNewName("");
       onSaved(response.project);
       setColumns((current) => mergeColumnSnapshot(current, response.project.columns ?? []));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "We could not add that column.");
+      if ((caught as Error & { code?: string }).code === "CONCURRENT_UPDATE") {
+        setError("This workflow changed elsewhere. Your unsaved changes are still here.");
+      } else {
+        setError(caught instanceof Error ? caught.message : "We could not add that column.");
+      }
     } finally {
       setSaving(false);
     }
